@@ -1927,7 +1927,26 @@
 			<integer>67</integer>
 		</dict>
 		<key>Entries</key>
-		<array/>
+		<array>
+			<dict>
+				<key>Arguments</key>
+				<string></string>
+				<key>Auxiliary</key>
+				<false/>
+				<key>Comment</key>
+				<string>Explicit systemd-boot entry on the internal Linux EFI System Partition.</string>
+				<key>Enabled</key>
+				<true/>
+				<key>Flavour</key>
+				<string>Linux</string>
+				<key>Name</key>
+				<string>Gentoo Linux</string>
+				<key>Path</key>
+				<string>\EFI\systemd\systemd-bootx64.efi</string>
+				<key>TextMode</key>
+				<false/>
+			</dict>
+		</array>
 		<key>Security</key>
 		<dict>
 			<key>AllowSetDefault</key>

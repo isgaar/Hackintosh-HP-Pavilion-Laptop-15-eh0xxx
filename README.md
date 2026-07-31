@@ -29,8 +29,9 @@ sudo ./tools/prepare-macos-recovery-usb.sh --device /dev/sdX
 
 El script descarga macOS Sequoia Recovery de forma predeterminada, crea una GPT
 con una partición FAT32 `OPENCORE` para la EFI y una partición HFS que recibe la
-Recovery extraída desde el DMG. Para Ventura, añade `--os ventura`. Si la imagen
-de Recovery ya existe, puedes reutilizarla:
+Recovery extraída desde el DMG. El script verifica la cabecera HFS+ antes de
+declarar éxito. Para Ventura, añade `--os ventura`. Si la imagen de Recovery ya
+existe, puedes reutilizarla:
 
 ```bash
 sudo ./tools/prepare-macos-recovery-usb.sh \
@@ -64,6 +65,9 @@ la salida detallada del kernel. Tras reproducir un fallo, apaga el equipo, monta
 el USB en Linux y guarda esos archivos antes de otro intento. Vuelve a los
 binarios RELEASE de OpenCore cuando el arranque sea estable.
 
+La EFI incluye una entrada explícita para el cargador EFI de Linux basado en
+systemd-boot, además de las entradas que OpenCore detecte automáticamente.
+
 Consulta la [guía de instalación de Dortania](https://dortania.github.io/OpenCore-Install-Guide/)
 para comprender cada ajuste antes de modificarlo.
 
@@ -93,8 +97,9 @@ sudo ./tools/prepare-macos-recovery-usb.sh --device /dev/sdX
 
 The script downloads macOS Sequoia Recovery by default, creates a GPT with a
 FAT32 `OPENCORE` partition for the EFI and an HFS partition that receives the
-Recovery extracted from the DMG. Add `--os ventura` for Ventura. Reuse an
-existing Recovery image when appropriate:
+Recovery extracted from the DMG. The script verifies the HFS+ header before it
+reports success. Add `--os ventura` for Ventura. Reuse an existing Recovery
+image when appropriate:
 
 ```bash
 sudo ./tools/prepare-macos-recovery-usb.sh \
@@ -125,6 +130,9 @@ The `-v debug=0x12a keepsyms=1 msgbuf=1048576` boot arguments retain detailed
 kernel output. After reproducing a failure, shut down, mount the USB on Linux,
 and save these files before another attempt. Return to OpenCore RELEASE binaries
 once booting is stable.
+
+The EFI includes an explicit entry for a systemd-boot based Linux EFI loader,
+in addition to entries OpenCore can discover automatically.
 
 Read the [Dortania OpenCore Install Guide](https://dortania.github.io/OpenCore-Install-Guide/)
 before changing settings.

@@ -144,9 +144,11 @@ find_hfs_partition_index() {
             END { if (found) print result }
         ' <<< "$partition_list")"
     else
-        partition_list="$("$SEVEN_ZIP" l "$RECOVERY_DMG" 2>&1)" || die "No se pudo listar la imagen de Recovery con 7z."
+        # Fuerza la capa DMG. Sin -tDmg, 7z abre el HFS anidado y puede no
+        # emitir el miembro crudo 4.hfs aunque termine con estado correcto.
+        partition_list="$("$SEVEN_ZIP" l -tDmg "$RECOVERY_DMG" 2>&1)" || die "No se pudo listar la imagen de Recovery con 7z."
         RECOVERY_HFS_MEMBER="$(awk '
-            /^Path = [0-9]+\.hfs$/ && !found { result = $3; found = 1 }
+            $NF ~ /^[0-9]+\.hfs$/ && !found { result = $NF; found = 1 }
             END { if (found) print result }
         ' <<< "$partition_list")"
         RECOVERY_PARTITION_INDEX="${RECOVERY_HFS_MEMBER%.hfs}"
@@ -162,8 +164,15 @@ extract_hfs_recovery() {
     if [[ -n "$DMG2IMG" ]]; then
         "$DMG2IMG" -p "$RECOVERY_PARTITION_INDEX" "$RECOVERY_DMG" "$RECOVERY_PARTITION"
     else
-        "$SEVEN_ZIP" x -so "$RECOVERY_DMG" "$RECOVERY_HFS_MEMBER" > "$RECOVERY_PARTITION"
+        "$SEVEN_ZIP" e -tDmg -so "$RECOVERY_DMG" "$RECOVERY_HFS_MEMBER" > "$RECOVERY_PARTITION"
     fi
+}
+
+verify_hfs_recovery() {
+    local signature
+
+    signature="$(dd if="$RECOVERY_PARTITION" bs=1 skip=1024 count=2 status=none)" || die "No se pudo leer la cabecera de la partición Recovery."
+    [[ "$signature" == "H+" ]] || die "La Recovery escrita no contiene una cabecera HFS+ válida; no arranques con este USB."
 }
 
 while [[ $# -gt 0 ]]; do
@@ -216,6 +225,7 @@ require_command mountpoint
 require_command python3
 require_command mktemp
 require_command sync
+require_command dd
 
 DMG2IMG="$(command -v dmg2img || true)"
 SEVEN_ZIP="$(command -v 7z || command -v 7zz || true)"
@@ -311,7 +321,8 @@ trap - EXIT INT TERM
 
 printf 'Extrayendo Recovery (partición %s de la imagen) a %s...\n' "$RECOVERY_PARTITION_INDEX" "$RECOVERY_PARTITION"
 extract_hfs_recovery
+verify_hfs_recovery
 sync
 
-printf '\nUSB preparado correctamente: EFI en %s y Recovery HFS en %s.\n' "$EFI_PARTITION" "$RECOVERY_PARTITION"
+printf '\nUSB preparado correctamente: EFI en %s y Recovery HFS verificada en %s.\n' "$EFI_PARTITION" "$RECOVERY_PARTITION"
 printf 'Expúlsalo de forma segura y arranca desde la entrada UEFI del USB.\n'
