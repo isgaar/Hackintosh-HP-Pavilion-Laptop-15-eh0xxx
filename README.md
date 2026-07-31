@@ -1,56 +1,104 @@
-# EFI OpenCore — HP Pavilion Laptop 15-eh0xxx
+# OpenCore EFI
 
-EFI construida para el hardware y firmware de este equipo; no es una configuración genérica.
+[Español](#español) · [English](#english)
 
-## Objetivo
+## Español
 
-- macOS Ventura 13 (Darwin 22.x).
-- OpenCore 1.0.8.
-- Generada y ajustada con [OpCore-Simplify](https://github.com/lzhoang2801/OpCore-Simplify).
+### Propósito
 
-OpCore-Simplify detectó soporte funcional en versiones posteriores, pero recomendó Ventura como el límite de mayor estabilidad para este APU Renoir. Por ello esta revisión no apunta a Sequoia.
+EFI de OpenCore preparada para una instalación de macOS en un portátil AMD. Se
+mantienen únicamente los SSDT, kexts y el mapa USB necesarios para esta
+configuración. Revísala y pruébala siempre en una memoria USB antes de copiarla
+a una partición EFI interna.
 
-## Hardware verificado
+### Contenido
 
-| Componente | Identificación exacta | Configuración aplicada |
-| --- | --- | --- |
-| Equipo / firmware | HP Pavilion 15-eh0xxx, placa 87C5, BIOS F.32 (2025-08-14) | Tablas ACPI del firmware F.32 |
-| CPU / iGPU | AMD Ryzen 5 4500U (Renoir), Radeon Vega 6 `1002:1636` | NootedRed + ForgedInvariant |
-| Audio | Realtek ALC287, controlador AMD `1022:15e3` | AppleALC, `layout-id = 11` |
-| Wi-Fi / Bluetooth | Intel AX200 `8086:2723`, BT `8087:0029` | itlwm, IntelBluetoothFirmware, IntelBTPatcher y BlueToolFixup |
-| Almacenamiento | WD Green SN350 NVMe `15b7:5014` | NVMeFix |
-| Lector SD | Realtek RTS522A `10ec:522a` | Sinetek-rtsx |
-| Teclado / trackpad | PS/2 PNP0303 / Synaptics I²C SYNA32AA | VoodooPS2Controller, VoodooI2C y VoodooI2CHID |
-| USB | Dos controladores AMD `1022:1639` | GenericUSBXHCI + USBToolBox + mapa de 12 puertos |
-| Cámara | HP Wide Vision HD `30c9:000e` | UVC nativo por el puerto USB interno mapeado |
-| Batería / brillo | BAT0 ACPI / panel interno | SMCBatteryManager, SMCLightSensor, PNLF y BrightnessKeys |
-| Memoria | 20 GB RAM | Soporte nativo; no requiere inyección |
+- `EFI/`: cargador OpenCore, ACPI, controladores y kexts.
+- `tools/prepare-ventura-usb.sh`: crea un USB de Recovery desde Linux siguiendo
+  el método FAT32 de Dortania.
 
-## ACPI y USB
+### Crear un USB desde Linux
 
-Solo se cargan los ocho SSDT generados para este firmware (`ALS0`, `EC`, `PLUG-ALT`, `PNLF`, `RTCAWAC`, `USB-Reset`, `USBX` y `XOSI`), en lugar de cargar el DSDT y todas las tablas originales como SSDT.
-
-`UTBMap.kext` conserva y valida los seis puertos de cada controlador contra el DSDT: USB-C/USB-A externos y cámara/Bluetooth internos. No se usa `UTBDefault.kext`.
-
-## Validaciones realizadas
-
-- Informe de hardware validado por OpCore-Simplify.
-- DSDT y SSDT de BIOS F.32 desensamblados correctamente con iASL.
-- Todas las referencias activas de ACPI, kexts y drivers existen en el EFI.
-- `ocvalidate` de OpenCore 1.0.8: sin incidencias.
-
-## Uso seguro
-
-Este repositorio no modifica `/boot/efi` ni el cargador de Linux. Copia `EFI/` primero a una memoria USB de instalación y conserva el EFI anterior hasta confirmar el arranque.
-
-La BIOS debe arrancar en UEFI con Secure Boot desactivado. El primer arranque conserva `-v debug=0x100 keepsyms=1` para diagnosticar un fallo; elimínalos solo tras confirmar estabilidad. Para Wi-Fi en macOS instala HeliPort: `itlwm` es la opción estable, pero no ofrece AirDrop ni Instant Hotspot. Tras cualquier actualización de BIOS, vuelve a extraer ACPI y valida el EFI antes de usarlo.
-
-### Crear el USB desde Linux
-
-El script [tools/prepare-ventura-usb.sh](tools/prepare-ventura-usb.sh) implementa el método FAT32 de Dortania: descarga Ventura Recovery con `macrecovery`, crea una GPT nueva, copia `com.apple.recovery.boot` y el EFI. Por seguridad solo acepta discos USB extraíbles, rechaza los que estén montados y exige escribir el nombre del disco antes de borrarlo.
+Instala las dependencias de tu distribución: `python3`, `sgdisk` y
+`dosfstools` (`mkfs.vfat`). Indica siempre el disco USB completo, nunca una de
+sus particiones:
 
 ```bash
 sudo ./tools/prepare-ventura-usb.sh --device /dev/sdX
 ```
 
-Si `BaseSystem.dmg` y `BaseSystem.chunklist` ya están en `~/Proyectos/opencore/Utilities/macrecovery/com.apple.recovery.boot/`, añade `--skip-download`. Usa `/dev/sdX` únicamente después de confirmar con `lsblk` que es la memoria USB; el comando borra por completo ese disco.
+El script descarga macOS Ventura Recovery con `macrecovery`, crea una tabla GPT
+con una partición FAT32 `OPENCORE` y copia Recovery más `EFI/`. Si la imagen de
+Recovery ya existe, puedes reutilizarla:
+
+```bash
+sudo ./tools/prepare-ventura-usb.sh \
+  --device /dev/sdX \
+  --macrecovery /ruta/a/macrecovery \
+  --skip-download
+```
+
+El destino se borra por completo. Como medida de seguridad, el script solo
+acepta discos USB extraíbles, rechaza discos montados y exige escribir
+`ACEPTO` antes de particionar. Confirma el dispositivo con `lsblk` antes de
+aceptar.
+
+### Arranque y diagnóstico
+
+Usa UEFI y desactiva Secure Boot. Mantén el modo verboso durante las primeras
+pruebas y conserva una copia de la EFI que funcionaba antes de cualquier cambio.
+Si falla el arranque, guarda una fotografía de las últimas líneas en pantalla y
+valida `EFI/OC/config.plist` con la versión de `ocvalidate` que corresponda a
+OpenCore.
+
+Consulta la [guía de instalación de Dortania](https://dortania.github.io/OpenCore-Install-Guide/)
+para comprender cada ajuste antes de modificarlo.
+
+## English
+
+### Purpose
+
+This OpenCore EFI is prepared for macOS installation on an AMD laptop. It keeps
+only the SSDTs, kexts, and USB map needed by this configuration. Review and test
+it from a USB drive before copying it to an internal EFI partition.
+
+### Contents
+
+- `EFI/`: the OpenCore bootloader, ACPI tables, drivers, and kexts.
+- `tools/prepare-ventura-usb.sh`: creates a Recovery USB on Linux using
+  Dortania's FAT32 method.
+
+### Create a USB installer on Linux
+
+Install your distribution's `python3`, `sgdisk`, and `dosfstools`
+(`mkfs.vfat`) packages. Always specify the complete USB disk, never one of its
+partitions:
+
+```bash
+sudo ./tools/prepare-ventura-usb.sh --device /dev/sdX
+```
+
+The script downloads macOS Ventura Recovery with `macrecovery`, creates a GPT
+with one FAT32 `OPENCORE` partition, then copies Recovery and `EFI/`. Reuse an
+existing Recovery image when appropriate:
+
+```bash
+sudo ./tools/prepare-ventura-usb.sh \
+  --device /dev/sdX \
+  --macrecovery /path/to/macrecovery \
+  --skip-download
+```
+
+The target drive is completely erased. As a safeguard, the script accepts only
+removable USB disks, rejects mounted disks, and requires the exact word
+`ACEPTO` before partitioning. Confirm the target with `lsblk` before accepting.
+
+### Booting and troubleshooting
+
+Use UEFI and disable Secure Boot. Keep verbose booting enabled while testing and
+retain a known-good EFI backup before making changes. If booting fails, capture
+the final on-screen lines and validate `EFI/OC/config.plist` with the
+`ocvalidate` version that matches OpenCore.
+
+Read the [Dortania OpenCore Install Guide](https://dortania.github.io/OpenCore-Install-Guide/)
+before changing settings.

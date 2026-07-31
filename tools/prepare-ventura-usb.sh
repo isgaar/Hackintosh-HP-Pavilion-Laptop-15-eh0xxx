@@ -27,20 +27,28 @@ die() {
 
 usage() {
     cat <<EOF
-Uso:
+Uso / Usage:
   sudo $0 --device /dev/sdX [--macrecovery /ruta/a/macrecovery] [--skip-download]
 
-Opciones:
+Opciones / Options:
   --device RUTA         Disco USB completo que se va a borrar (ej. /dev/sda).
-  --macrecovery RUTA    Directorio con macrecovery.py. Por defecto:
-                         \${MACRECOVERY_DIR} o $DEFAULT_MACRECOVERY_DIR
-  --skip-download       Reutiliza BaseSystem.dmg y BaseSystem.chunklist ya descargados.
-  -h, --help            Muestra esta ayuda.
+  --device PATH         Complete USB disk to erase (e.g. /dev/sda).
+  --macrecovery RUTA    Directorio que contiene macrecovery.py. Por defecto:
+  --macrecovery PATH    Directory containing macrecovery.py. Default:
+                         \${MACRECOVERY_DIR} o ~/Proyectos/opencore/Utilities/macrecovery
+  --skip-download       Reutiliza una imagen de Recovery ya descargada.
+  --skip-download       Reuse an already downloaded Recovery image.
+  -h, --help            Muestra esta ayuda / Show this help.
 
 El script crea una GPT con una única partición FAT32 OPENCORE, descarga Recovery
 de Ventura, copia com.apple.recovery.boot y el directorio EFI de este repositorio.
 No se puede ejecutar de forma no interactiva: antes de borrar se debe confirmar el
-nombre exacto del disco.
+texto solicitado.
+
+The script creates a GPT with one FAT32 OPENCORE partition, downloads Ventura
+Recovery, and copies com.apple.recovery.boot plus this repository's EFI folder.
+It cannot run non-interactively: the requested confirmation must be entered
+before the disk is erased.
 EOF
 }
 
@@ -164,9 +172,10 @@ esac
 
 printf '\nEl siguiente disco se BORRARÁ por completo:\n\n'
 lsblk --paths --output NAME,RM,SIZE,MODEL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$DEVICE"
-printf '\nSe instalarán macOS Ventura Recovery y el EFI de: %s\n' "$REPO_DIR"
-read -r -p "Escribe exactamente 'BORRAR $DEVICE' para continuar: " confirmation
-[[ "$confirmation" == "BORRAR $DEVICE" ]] || die "Confirmación incorrecta; no se modificó ningún disco."
+printf '\nSe instalarán macOS Ventura Recovery y el EFI de este repositorio.\n'
+printf 'macOS Ventura Recovery and this repository EFI will be installed.\n'
+read -r -p "Escribe exactamente 'ACEPTO' para continuar / Type exactly 'ACEPTO' to continue: " confirmation
+[[ "$confirmation" == "ACEPTO" ]] || die "Confirmación incorrecta / Invalid confirmation; no se modificó ningún disco."
 
 download_recovery
 
