@@ -48,11 +48,14 @@ ProductBuildVersion: 25G72
 
 `macrecovery` verificó todos los chunks contra `BaseSystem.chunklist`. El script
 del repositorio también lee `SystemVersion.plist` dentro del DMG y exige una
-versión `26.x` antes de particionar un USB.
+versión `26.x` antes de particionar un USB. El USB usa el método FAT32 principal
+de Dortania: `EFI/` y `com.apple.recovery.boot/` comparten la misma partición;
+no se extrae una partición HFS independiente.
 
 The active Recovery was downloaded from Apple, verified against its chunklist,
 and identified from its embedded `SystemVersion.plist` as Tahoe 26.6 build
-25G72. The USB helper rejects non-26.x images.
+25G72. The USB helper rejects non-26.x images and uses Dortania's single-FAT32
+layout: `EFI/` and `com.apple.recovery.boot/` on the same partition.
 
 ## Procedencia reproducible / Reproducible provenance
 

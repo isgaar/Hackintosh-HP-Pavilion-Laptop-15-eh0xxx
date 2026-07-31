@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Crea un USB de recuperación de macOS con el EFI de este repositorio.
-# Basado en el método 2 de la guía de Dortania para Linux.
+# Crea un USB de recuperación de macOS Tahoe con el método FAT32 de Dortania.
 
 set -Eeuo pipefail
 
@@ -17,16 +16,11 @@ MACRECOVERY_DIR="$DEFAULT_MACRECOVERY_DIR"
 SKIP_DOWNLOAD=false
 MOUNT_DIR=""
 EFI_PARTITION=""
-RECOVERY_PARTITION=""
-RECOVERY_PARTITION_INDEX=""
-RECOVERY_HFS_MEMBER=""
 RECOVERY_PRODUCT_VERSION=""
-DMG2IMG=""
-SEVEN_ZIP=""
 
 readonly RECOVERY_MLB="00000000000000000"
 readonly TAHOE_BOARD_ID="Mac-CFF7D910A743CAAF"
-readonly MIN_USB_BYTES=$((4 * 1024 * 1024 * 1024))
+readonly MIN_USB_BYTES=$((2 * 1024 * 1024 * 1024))
 
 die() {
     printf 'Error: %s\n' "$*" >&2
@@ -50,17 +44,15 @@ Opciones / Options:
   --skip-download       Reuse an already downloaded Recovery image.
   -h, --help            Muestra esta ayuda / Show this help.
 
-El script crea una GPT con una partición FAT32 OPENCORE para la EFI y una
-partición HFS para macOS Tahoe Recovery. Verifica que la imagen sea macOS 26.x
-antes de borrar el USB y después extrae su partición HFS con dmg2img o 7z. No
-se puede ejecutar de forma no interactiva: antes de borrar se debe confirmar el
-texto solicitado.
+El script crea una sola partición FAT32 OPENCORE. Copia EFI/ y los archivos
+BaseSystem.dmg y BaseSystem.chunklist a com.apple.recovery.boot/, tal como el
+método principal de Dortania para Linux. No se puede ejecutar de forma no
+interactiva: antes de borrar se debe confirmar el texto solicitado.
 
-The script creates a GPT with a FAT32 OPENCORE partition for the EFI and an HFS
-partition for macOS Tahoe Recovery. It verifies that the image is macOS 26.x
-before erasing the USB, then extracts its HFS partition with dmg2img or 7z. It
-cannot run non-interactively: the requested confirmation must be entered before
-the disk is erased.
+The script creates one FAT32 OPENCORE partition. It copies EFI/ and
+BaseSystem.dmg and BaseSystem.chunklist to com.apple.recovery.boot/, following
+Dortania's primary Linux method. It cannot run non-interactively: the requested
+confirmation must be entered before the disk is erased.
 EOF
 }
 
@@ -135,48 +127,6 @@ verify_tahoe_recovery() {
     printf 'Recovery verificada: macOS Tahoe %s.\n' "$RECOVERY_PRODUCT_VERSION"
 }
 
-find_hfs_partition_index() {
-    local partition_list
-
-    if [[ -n "$DMG2IMG" ]]; then
-        partition_list="$("$DMG2IMG" -l "$RECOVERY_DMG" 2>&1)" || die "No se pudo listar la imagen de Recovery con dmg2img."
-        RECOVERY_PARTITION_INDEX="$(awk '
-            /^partition [0-9]+:/ { part_no = $2; sub(/:/, "", part_no) }
-            /Apple_HFS/ && !found { result = part_no; found = 1 }
-            END { if (found) print result }
-        ' <<< "$partition_list")"
-    else
-        # Fuerza la capa DMG. Sin -tDmg, 7z abre el HFS anidado y puede no
-        # emitir el miembro crudo 4.hfs aunque termine con estado correcto.
-        partition_list="$("$SEVEN_ZIP" l -tDmg "$RECOVERY_DMG" 2>&1)" || die "No se pudo listar la imagen de Recovery con 7z."
-        RECOVERY_HFS_MEMBER="$(awk '
-            $NF ~ /^[0-9]+\.hfs$/ && !found { result = $NF; found = 1 }
-            END { if (found) print result }
-        ' <<< "$partition_list")"
-        RECOVERY_PARTITION_INDEX="${RECOVERY_HFS_MEMBER%.hfs}"
-    fi
-
-    [[ "$RECOVERY_PARTITION_INDEX" =~ ^[0-9]+$ ]] || {
-        printf '%s\n' "$partition_list" >&2
-        die "No se encontró una partición Apple_HFS dentro de la imagen de Recovery."
-    }
-}
-
-extract_hfs_recovery() {
-    if [[ -n "$DMG2IMG" ]]; then
-        "$DMG2IMG" -p "$RECOVERY_PARTITION_INDEX" "$RECOVERY_DMG" "$RECOVERY_PARTITION"
-    else
-        "$SEVEN_ZIP" e -tDmg -so "$RECOVERY_DMG" "$RECOVERY_HFS_MEMBER" > "$RECOVERY_PARTITION"
-    fi
-}
-
-verify_hfs_recovery() {
-    local signature
-
-    signature="$(dd if="$RECOVERY_PARTITION" bs=1 skip=1024 count=2 status=none)" || die "No se pudo leer la cabecera de la partición Recovery."
-    [[ "$signature" == "H+" ]] || die "La Recovery escrita no contiene una cabecera HFS+ válida; no arranques con este USB."
-}
-
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --device)
@@ -222,11 +172,9 @@ require_command mountpoint
 require_command python3
 require_command mktemp
 require_command sync
-require_command dd
 
-DMG2IMG="$(command -v dmg2img || true)"
 SEVEN_ZIP="$(command -v 7z || command -v 7zz || true)"
-[[ -n "$SEVEN_ZIP" ]] || die "Instala 7z/7zz para verificar y extraer la Recovery de Tahoe."
+[[ -n "$SEVEN_ZIP" ]] || die "Instala 7z/7zz para verificar la Recovery de Tahoe."
 
 FAT_FORMATTER="$(command -v mkfs.vfat || command -v mkfs.fat || true)"
 [[ -n "$FAT_FORMATTER" ]] || die "Instala dosfstools (mkfs.vfat o mkfs.fat)."
@@ -237,7 +185,7 @@ DEVICE="$(readlink -f -- "$DEVICE")"
 [[ "$(lsblk --noheadings --raw --nodeps --output RM "$DEVICE")" == "1" ]] || die "$DEVICE no está marcado como extraíble; se rechaza por seguridad."
 [[ "$(lsblk --noheadings --raw --nodeps --output TRAN "$DEVICE")" == "usb" ]] || die "$DEVICE no está conectado por USB; se rechaza por seguridad."
 DEVICE_SIZE_BYTES="$(lsblk --bytes --noheadings --raw --nodeps --output SIZE "$DEVICE" | tr -d '[:space:]')"
-[[ "$DEVICE_SIZE_BYTES" =~ ^[0-9]+$ && "$DEVICE_SIZE_BYTES" -ge "$MIN_USB_BYTES" ]] || die "$DEVICE debe tener al menos 4 GiB para usar el método HFS."
+[[ "$DEVICE_SIZE_BYTES" =~ ^[0-9]+$ && "$DEVICE_SIZE_BYTES" -ge "$MIN_USB_BYTES" ]] || die "$DEVICE debe tener al menos 2 GiB para Recovery Tahoe."
 [[ -f "$EFI_SOURCE/BOOT/BOOTx64.efi" ]] || die "No encuentro $EFI_SOURCE/BOOT/BOOTx64.efi"
 [[ -f "$EFI_SOURCE/OC/OpenCore.efi" ]] || die "No encuentro $EFI_SOURCE/OC/OpenCore.efi"
 [[ -f "$EFI_SOURCE/OC/config.plist" ]] || die "No encuentro $EFI_SOURCE/OC/config.plist"
@@ -248,14 +196,8 @@ if is_mounted; then
 fi
 
 case "$DEVICE" in
-    *[0-9])
-        EFI_PARTITION="${DEVICE}p1"
-        RECOVERY_PARTITION="${DEVICE}p2"
-        ;;
-    *)
-        EFI_PARTITION="${DEVICE}1"
-        RECOVERY_PARTITION="${DEVICE}2"
-        ;;
+    *[0-9]) EFI_PARTITION="${DEVICE}p1" ;;
+    *) EFI_PARTITION="${DEVICE}1" ;;
 esac
 
 printf '\nEl siguiente disco se BORRARÁ por completo:\n\n'
@@ -279,14 +221,10 @@ else
 fi
 
 verify_tahoe_recovery
-find_hfs_partition_index
 
-printf '\nCreando GPT, FAT32 OPENCORE y partición HFS Recovery en %s...\n' "$DEVICE"
+printf '\nCreando GPT y una partición FAT32 OPENCORE en %s...\n' "$DEVICE"
 sgdisk --zap-all "$DEVICE"
-sgdisk --clear \
-    --new=1:1MiB:+512MiB --typecode=1:0700 --change-name=1:OPENCORE \
-    --new=2:0:0 --typecode=2:AF00 --change-name=2:'macOS Recovery' \
-    "$DEVICE"
+sgdisk --clear --new=1:1MiB:0 --typecode=1:0700 --change-name=1:OPENCORE "$DEVICE"
 sync
 
 if command -v partprobe >/dev/null 2>&1; then
@@ -296,31 +234,28 @@ if command -v udevadm >/dev/null 2>&1; then
     udevadm settle
 fi
 wait_for_partition "$EFI_PARTITION"
-wait_for_partition "$RECOVERY_PARTITION"
-
 "$FAT_FORMATTER" -F 32 -n OPENCORE "$EFI_PARTITION"
 
 MOUNT_DIR="$(mktemp -d /tmp/opencore-macos-usb.XXXXXX)"
 trap cleanup EXIT INT TERM
 mount "$EFI_PARTITION" "$MOUNT_DIR"
 
-printf 'Copiando EFI y extrayendo la partición HFS de Recovery...\n'
-mkdir -p "$MOUNT_DIR/EFI"
+printf 'Copiando EFI y Recovery al volumen FAT32...\n'
+mkdir -p "$MOUNT_DIR/EFI" "$MOUNT_DIR/com.apple.recovery.boot"
 cp -R "$EFI_SOURCE/." "$MOUNT_DIR/EFI/"
+cp "$RECOVERY_DMG" "$MOUNT_DIR/com.apple.recovery.boot/BaseSystem.dmg"
+cp "$RECOVERY_CHUNKLIST" "$MOUNT_DIR/com.apple.recovery.boot/BaseSystem.chunklist"
 sync
 
 [[ -f "$MOUNT_DIR/EFI/BOOT/BOOTx64.efi" ]] || die "No se copió BOOTx64.efi."
 [[ -f "$MOUNT_DIR/EFI/OC/config.plist" ]] || die "No se copió config.plist."
+[[ -s "$MOUNT_DIR/com.apple.recovery.boot/BaseSystem.dmg" ]] || die "No se copió BaseSystem.dmg."
+[[ -s "$MOUNT_DIR/com.apple.recovery.boot/BaseSystem.chunklist" ]] || die "No se copió BaseSystem.chunklist."
 
 umount "$MOUNT_DIR"
 rmdir "$MOUNT_DIR"
 MOUNT_DIR=""
 trap - EXIT INT TERM
 
-printf 'Extrayendo Recovery (partición %s de la imagen) a %s...\n' "$RECOVERY_PARTITION_INDEX" "$RECOVERY_PARTITION"
-extract_hfs_recovery
-verify_hfs_recovery
-sync
-
-printf '\nUSB Tahoe preparado correctamente: EFI en %s y Recovery HFS verificada en %s.\n' "$EFI_PARTITION" "$RECOVERY_PARTITION"
+printf '\nUSB Tahoe preparado correctamente: EFI y com.apple.recovery.boot en %s.\n' "$EFI_PARTITION"
 printf 'Expúlsalo de forma segura y arranca desde la entrada UEFI del USB.\n'

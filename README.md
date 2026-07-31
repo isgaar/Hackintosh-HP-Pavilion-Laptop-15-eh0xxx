@@ -72,9 +72,11 @@ sudo ./tools/prepare-macos-recovery-usb.sh \
 ```
 
 Antes de modificar el disco, el script abre `SystemVersion.plist` dentro del
-DMG y rechaza cualquier versión que no sea 26.x. Después crea una GPT, una
-partición FAT32 `OPENCORE`, una partición HFS Recovery y verifica la cabecera
-HFS+ escrita.
+DMG y rechaza cualquier versión que no sea 26.x. Después crea una GPT con una
+sola partición FAT32 `OPENCORE`; en ella copia `EFI/` y
+`com.apple.recovery.boot/BaseSystem.dmg` junto con su `BaseSystem.chunklist`.
+Es el método principal de Dortania para Linux y evita depender de una partición
+HFS extraída.
 
 El disco indicado se borra por completo. El script rechaza dispositivos no USB,
 discos que no estén marcados como extraíbles y unidades montadas. Comprueba el
@@ -183,9 +185,11 @@ sudo ./tools/prepare-macos-recovery-usb.sh \
 ```
 
 Before erasing anything, the script reads `SystemVersion.plist` from the DMG and
-rejects every image that is not macOS 26.x. It then creates a GPT, a FAT32
-`OPENCORE` partition, an HFS Recovery partition, and validates the written HFS+
-header.
+rejects every image that is not macOS 26.x. It then creates a GPT with one FAT32
+`OPENCORE` partition containing `EFI/` and
+`com.apple.recovery.boot/BaseSystem.dmg` with its `BaseSystem.chunklist`. This
+is Dortania's primary Linux method and does not depend on an extracted HFS
+partition.
 
 The selected disk is erased completely. The script rejects non-USB devices,
 non-removable disks, and mounted volumes. Verify the target with `lsblk` and type
