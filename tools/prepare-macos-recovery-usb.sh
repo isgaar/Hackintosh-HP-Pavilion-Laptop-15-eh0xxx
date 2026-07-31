@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Crea un USB de recuperación de macOS Ventura con el EFI de este repositorio.
-# Basado en el método 1 de la guía de Dortania para Linux.
+# Crea un USB de recuperación de macOS con el EFI de este repositorio.
+# Basado en el método 2 de la guía de Dortania para Linux.
 
 set -Eeuo pipefail
 
@@ -16,9 +16,16 @@ DEVICE=""
 MACRECOVERY_DIR="$DEFAULT_MACRECOVERY_DIR"
 SKIP_DOWNLOAD=false
 MOUNT_DIR=""
+MACOS_VERSION="sequoia"
+EFI_PARTITION=""
+RECOVERY_PARTITION=""
+RECOVERY_PARTITION_INDEX=""
+RECOVERY_HFS_MEMBER=""
+DMG2IMG=""
+SEVEN_ZIP=""
 
-readonly VENTURA_BOARD_ID="Mac-B4831CEBD52A0C4C"
-readonly VENTURA_MLB="00000000000000000"
+readonly RECOVERY_MLB="00000000000000000"
+readonly MIN_USB_BYTES=$((4 * 1024 * 1024 * 1024))
 
 die() {
     printf 'Error: %s\n' "$*" >&2
@@ -28,7 +35,7 @@ die() {
 usage() {
     cat <<EOF
 Uso / Usage:
-  sudo $0 --device /dev/sdX [--macrecovery /ruta/a/macrecovery] [--skip-download]
+  sudo $0 --device /dev/sdX [--os sequoia|ventura] [--macrecovery /ruta/a/macrecovery] [--skip-download]
 
 Opciones / Options:
   --device RUTA         Disco USB completo que se va a borrar (ej. /dev/sda).
@@ -36,19 +43,21 @@ Opciones / Options:
   --macrecovery RUTA    Directorio que contiene macrecovery.py. Por defecto:
   --macrecovery PATH    Directory containing macrecovery.py. Default:
                          \${MACRECOVERY_DIR} o ~/Proyectos/opencore/Utilities/macrecovery
+  --os VERSION           Recovery to download: sequoia (default) or ventura.
+  --os VERSION           Recovery a descargar: sequoia (predeterminado) o ventura.
   --skip-download       Reutiliza una imagen de Recovery ya descargada.
   --skip-download       Reuse an already downloaded Recovery image.
   -h, --help            Muestra esta ayuda / Show this help.
 
-El script crea una GPT con una única partición FAT32 OPENCORE, descarga Recovery
-de Ventura, copia com.apple.recovery.boot y el directorio EFI de este repositorio.
-No se puede ejecutar de forma no interactiva: antes de borrar se debe confirmar el
-texto solicitado.
+El script crea una GPT con una partición FAT32 OPENCORE para la EFI y una
+partición HFS para la imagen de Recovery. Descarga la Recovery elegida y extrae
+su partición HFS con dmg2img o 7z. No se puede ejecutar de forma no interactiva:
+antes de borrar se debe confirmar el texto solicitado.
 
-The script creates a GPT with one FAT32 OPENCORE partition, downloads Ventura
-Recovery, and copies com.apple.recovery.boot plus this repository's EFI folder.
-It cannot run non-interactively: the requested confirmation must be entered
-before the disk is erased.
+The script creates a GPT with a FAT32 OPENCORE partition for the EFI and an HFS
+partition for the Recovery image. It downloads the selected Recovery and
+extracts its HFS partition with dmg2img or 7z. It cannot run non-interactively:
+the requested confirmation must be entered before the disk is erased.
 EOF
 }
 
@@ -82,13 +91,14 @@ is_mounted() {
 }
 
 wait_for_partition() {
+    local partition="$1"
     local attempts=0
-    while [[ ! -b "$PARTITION" && $attempts -lt 10 ]]; do
+    while [[ ! -b "$partition" && $attempts -lt 10 ]]; do
         sleep 1
         attempts=$((attempts + 1))
     done
 
-    [[ -b "$PARTITION" ]] || die "No apareció la partición esperada: $PARTITION"
+    [[ -b "$partition" ]] || die "No apareció la partición esperada: $partition"
 }
 
 download_recovery() {
@@ -96,14 +106,60 @@ download_recovery() {
         return
     fi
 
-    printf 'Descargando macOS Ventura Recovery mediante macrecovery...\n'
+    local board_id
+    local recovery_name
+
+    case "$MACOS_VERSION" in
+        sequoia)
+            board_id="Mac-7BA5B2D9E42DDD94"
+            recovery_name="macOS Sequoia"
+            ;;
+        ventura)
+            board_id="Mac-B4831CEBD52A0C4C"
+            recovery_name="macOS Ventura"
+            ;;
+        *)
+            die "Versión no compatible: $MACOS_VERSION. Usa sequoia o ventura."
+            ;;
+    esac
+
+    printf 'Descargando %s Recovery mediante macrecovery...\n' "$recovery_name"
     (
         cd -- "$MACRECOVERY_DIR"
         python3 ./macrecovery.py \
-            -b "$VENTURA_BOARD_ID" \
-            -m "$VENTURA_MLB" \
+            -b "$board_id" \
+            -m "$RECOVERY_MLB" \
             download
     )
+}
+
+find_hfs_partition_index() {
+    local partition_list
+
+    if [[ -n "$DMG2IMG" ]]; then
+        partition_list="$("$DMG2IMG" -l "$RECOVERY_DMG" 2>&1)" || die "No se pudo listar la imagen de Recovery con dmg2img."
+        RECOVERY_PARTITION_INDEX="$(printf '%s\n' "$partition_list" | awk '
+            /^partition [0-9]+:/ { part_no = $2; sub(/:/, "", part_no) }
+            /Apple_HFS/ { print part_no; exit }
+        ')"
+    else
+        RECOVERY_HFS_MEMBER="$("$SEVEN_ZIP" l "$RECOVERY_DMG" 2>/dev/null | awk '/^Path = [0-9]+\.hfs$/ { print $3; exit }')"
+        RECOVERY_PARTITION_INDEX="${RECOVERY_HFS_MEMBER%.hfs}"
+        partition_list="Miembro detectado por 7z: ${RECOVERY_HFS_MEMBER:-ninguno}"
+    fi
+
+    [[ "$RECOVERY_PARTITION_INDEX" =~ ^[0-9]+$ ]] || {
+        printf '%s\n' "$partition_list" >&2
+        die "No se encontró una partición Apple_HFS dentro de la imagen de Recovery."
+    }
+}
+
+extract_hfs_recovery() {
+    if [[ -n "$DMG2IMG" ]]; then
+        "$DMG2IMG" -p "$RECOVERY_PARTITION_INDEX" "$RECOVERY_DMG" "$RECOVERY_PARTITION"
+    else
+        "$SEVEN_ZIP" x -so "$RECOVERY_DMG" "$RECOVERY_HFS_MEMBER" > "$RECOVERY_PARTITION"
+    fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -116,6 +172,11 @@ while [[ $# -gt 0 ]]; do
         --macrecovery)
             [[ $# -ge 2 ]] || die "--macrecovery requiere una ruta."
             MACRECOVERY_DIR="$2"
+            shift 2
+            ;;
+        --os)
+            [[ $# -ge 2 ]] || die "--os requiere sequoia o ventura."
+            MACOS_VERSION="${2,,}"
             shift 2
             ;;
         --skip-download)
@@ -137,6 +198,10 @@ done
     usage
     die "Debes indicar --device /dev/sdX."
 }
+case "$MACOS_VERSION" in
+    sequoia|ventura) ;;
+    *) die "Versión no compatible: $MACOS_VERSION. Usa sequoia o ventura." ;;
+esac
 
 require_command sgdisk
 require_command lsblk
@@ -148,6 +213,10 @@ require_command python3
 require_command mktemp
 require_command sync
 
+DMG2IMG="$(command -v dmg2img || true)"
+SEVEN_ZIP="$(command -v 7zz || command -v 7z || true)"
+[[ -n "$DMG2IMG" || -n "$SEVEN_ZIP" ]] || die "Instala dmg2img o 7z/7zz para extraer la Recovery HFS."
+
 FAT_FORMATTER="$(command -v mkfs.vfat || command -v mkfs.fat || true)"
 [[ -n "$FAT_FORMATTER" ]] || die "Instala dosfstools (mkfs.vfat o mkfs.fat)."
 
@@ -156,6 +225,8 @@ DEVICE="$(readlink -f -- "$DEVICE")"
 [[ "$(lsblk --noheadings --raw --nodeps --output TYPE "$DEVICE")" == "disk" ]] || die "Indica el disco completo, no una partición."
 [[ "$(lsblk --noheadings --raw --nodeps --output RM "$DEVICE")" == "1" ]] || die "$DEVICE no está marcado como extraíble; se rechaza por seguridad."
 [[ "$(lsblk --noheadings --raw --nodeps --output TRAN "$DEVICE")" == "usb" ]] || die "$DEVICE no está conectado por USB; se rechaza por seguridad."
+DEVICE_SIZE_BYTES="$(lsblk --bytes --noheadings --raw --nodeps --output SIZE "$DEVICE" | tr -d '[:space:]')"
+[[ "$DEVICE_SIZE_BYTES" =~ ^[0-9]+$ && "$DEVICE_SIZE_BYTES" -ge "$MIN_USB_BYTES" ]] || die "$DEVICE debe tener al menos 4 GiB para usar el método HFS."
 [[ -f "$EFI_SOURCE/BOOT/BOOTx64.efi" ]] || die "No encuentro $EFI_SOURCE/BOOT/BOOTx64.efi"
 [[ -f "$EFI_SOURCE/OC/OpenCore.efi" ]] || die "No encuentro $EFI_SOURCE/OC/OpenCore.efi"
 [[ -f "$EFI_SOURCE/OC/config.plist" ]] || die "No encuentro $EFI_SOURCE/OC/config.plist"
@@ -166,14 +237,20 @@ if is_mounted; then
 fi
 
 case "$DEVICE" in
-    *[0-9]) PARTITION="${DEVICE}p1" ;;
-    *) PARTITION="${DEVICE}1" ;;
+    *[0-9])
+        EFI_PARTITION="${DEVICE}p1"
+        RECOVERY_PARTITION="${DEVICE}p2"
+        ;;
+    *)
+        EFI_PARTITION="${DEVICE}1"
+        RECOVERY_PARTITION="${DEVICE}2"
+        ;;
 esac
 
 printf '\nEl siguiente disco se BORRARÁ por completo:\n\n'
 lsblk --paths --output NAME,RM,SIZE,MODEL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$DEVICE"
-printf '\nSe instalarán macOS Ventura Recovery y el EFI de este repositorio.\n'
-printf 'macOS Ventura Recovery and this repository EFI will be installed.\n'
+printf '\nSe instalarán macOS Recovery y el EFI de este repositorio.\n'
+printf 'macOS Recovery and this repository EFI will be installed.\n'
 read -r -p "Escribe exactamente 'ACEPTO' para continuar / Type exactly 'ACEPTO' to continue: " confirmation
 [[ "$confirmation" == "ACEPTO" ]] || die "Confirmación incorrecta / Invalid confirmation; no se modificó ningún disco."
 
@@ -190,9 +267,14 @@ else
     die "No encuentro BaseSystem/RecoveryImage .dmg y .chunklist en $RECOVERY_DIR"
 fi
 
-printf '\nCreando GPT y FAT32 OPENCORE en %s...\n' "$DEVICE"
+find_hfs_partition_index
+
+printf '\nCreando GPT, FAT32 OPENCORE y partición HFS Recovery en %s...\n' "$DEVICE"
 sgdisk --zap-all "$DEVICE"
-sgdisk --clear --new=1:1MiB:0 --typecode=1:0700 --change-name=1:OPENCORE "$DEVICE"
+sgdisk --clear \
+    --new=1:1MiB:+512MiB --typecode=1:0700 --change-name=1:OPENCORE \
+    --new=2:0:0 --typecode=2:AF00 --change-name=2:'macOS Recovery' \
+    "$DEVICE"
 sync
 
 if command -v partprobe >/dev/null 2>&1; then
@@ -201,22 +283,20 @@ fi
 if command -v udevadm >/dev/null 2>&1; then
     udevadm settle
 fi
-wait_for_partition
+wait_for_partition "$EFI_PARTITION"
+wait_for_partition "$RECOVERY_PARTITION"
 
-"$FAT_FORMATTER" -F 32 -n OPENCORE "$PARTITION"
+"$FAT_FORMATTER" -F 32 -n OPENCORE "$EFI_PARTITION"
 
-MOUNT_DIR="$(mktemp -d /tmp/opencore-ventura-usb.XXXXXX)"
+MOUNT_DIR="$(mktemp -d /tmp/opencore-macos-usb.XXXXXX)"
 trap cleanup EXIT INT TERM
-mount "$PARTITION" "$MOUNT_DIR"
+mount "$EFI_PARTITION" "$MOUNT_DIR"
 
-printf 'Copiando Recovery y EFI...\n'
-mkdir -p "$MOUNT_DIR/com.apple.recovery.boot" "$MOUNT_DIR/EFI"
-cp -v "$RECOVERY_DMG" "$RECOVERY_CHUNKLIST" "$MOUNT_DIR/com.apple.recovery.boot/"
+printf 'Copiando EFI y extrayendo la partición HFS de Recovery...\n'
+mkdir -p "$MOUNT_DIR/EFI"
 cp -R "$EFI_SOURCE/." "$MOUNT_DIR/EFI/"
 sync
 
-[[ -f "$MOUNT_DIR/com.apple.recovery.boot/$(basename -- "$RECOVERY_DMG")" ]] || die "No se copió la imagen de Recovery."
-[[ -f "$MOUNT_DIR/com.apple.recovery.boot/$(basename -- "$RECOVERY_CHUNKLIST")" ]] || die "No se copió el chunklist de Recovery."
 [[ -f "$MOUNT_DIR/EFI/BOOT/BOOTx64.efi" ]] || die "No se copió BOOTx64.efi."
 [[ -f "$MOUNT_DIR/EFI/OC/config.plist" ]] || die "No se copió config.plist."
 
@@ -225,5 +305,9 @@ rmdir "$MOUNT_DIR"
 MOUNT_DIR=""
 trap - EXIT INT TERM
 
-printf '\nUSB preparado correctamente: %s (%s)\n' "$DEVICE" "$PARTITION"
+printf 'Extrayendo Recovery (partición %s de la imagen) a %s...\n' "$RECOVERY_PARTITION_INDEX" "$RECOVERY_PARTITION"
+extract_hfs_recovery
+sync
+
+printf '\nUSB preparado correctamente: EFI en %s y Recovery HFS en %s.\n' "$EFI_PARTITION" "$RECOVERY_PARTITION"
 printf 'Expúlsalo de forma segura y arranca desde la entrada UEFI del USB.\n'

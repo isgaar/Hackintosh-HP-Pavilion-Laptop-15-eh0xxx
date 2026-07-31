@@ -14,25 +14,26 @@ a una partición EFI interna.
 ### Contenido
 
 - `EFI/`: cargador OpenCore, ACPI, controladores y kexts.
-- `tools/prepare-ventura-usb.sh`: crea un USB de Recovery desde Linux siguiendo
-  el método FAT32 de Dortania.
+- `tools/prepare-macos-recovery-usb.sh`: crea un USB de Recovery desde Linux
+  con una EFI FAT32 y Recovery HFS, siguiendo el método 2 de Dortania.
 
 ### Crear un USB desde Linux
 
-Instala las dependencias de tu distribución: `python3`, `sgdisk` y
-`dosfstools` (`mkfs.vfat`). Indica siempre el disco USB completo, nunca una de
-sus particiones:
+Instala las dependencias de tu distribución: `python3`, `sgdisk`, `dosfstools`
+(`mkfs.vfat`) y `dmg2img` o `7z`/`7zz`. Indica siempre el disco USB completo,
+nunca una de sus particiones:
 
 ```bash
-sudo ./tools/prepare-ventura-usb.sh --device /dev/sdX
+sudo ./tools/prepare-macos-recovery-usb.sh --device /dev/sdX
 ```
 
-El script descarga macOS Ventura Recovery con `macrecovery`, crea una tabla GPT
-con una partición FAT32 `OPENCORE` y copia Recovery más `EFI/`. Si la imagen de
-Recovery ya existe, puedes reutilizarla:
+El script descarga macOS Sequoia Recovery de forma predeterminada, crea una GPT
+con una partición FAT32 `OPENCORE` para la EFI y una partición HFS que recibe la
+Recovery extraída desde el DMG. Para Ventura, añade `--os ventura`. Si la imagen
+de Recovery ya existe, puedes reutilizarla:
 
 ```bash
-sudo ./tools/prepare-ventura-usb.sh \
+sudo ./tools/prepare-macos-recovery-usb.sh \
   --device /dev/sdX \
   --macrecovery /ruta/a/macrecovery \
   --skip-download
@@ -77,25 +78,26 @@ it from a USB drive before copying it to an internal EFI partition.
 ### Contents
 
 - `EFI/`: the OpenCore bootloader, ACPI tables, drivers, and kexts.
-- `tools/prepare-ventura-usb.sh`: creates a Recovery USB on Linux using
-  Dortania's FAT32 method.
+- `tools/prepare-macos-recovery-usb.sh`: creates a Recovery USB on Linux with
+  a FAT32 EFI and HFS Recovery partition, following Dortania's method 2.
 
 ### Create a USB installer on Linux
 
-Install your distribution's `python3`, `sgdisk`, and `dosfstools`
-(`mkfs.vfat`) packages. Always specify the complete USB disk, never one of its
-partitions:
+Install your distribution's `python3`, `sgdisk`, `dosfstools` (`mkfs.vfat`),
+and `dmg2img` or `7z`/`7zz` packages. Always specify the complete USB disk,
+never one of its partitions:
 
 ```bash
-sudo ./tools/prepare-ventura-usb.sh --device /dev/sdX
+sudo ./tools/prepare-macos-recovery-usb.sh --device /dev/sdX
 ```
 
-The script downloads macOS Ventura Recovery with `macrecovery`, creates a GPT
-with one FAT32 `OPENCORE` partition, then copies Recovery and `EFI/`. Reuse an
+The script downloads macOS Sequoia Recovery by default, creates a GPT with a
+FAT32 `OPENCORE` partition for the EFI and an HFS partition that receives the
+Recovery extracted from the DMG. Add `--os ventura` for Ventura. Reuse an
 existing Recovery image when appropriate:
 
 ```bash
-sudo ./tools/prepare-ventura-usb.sh \
+sudo ./tools/prepare-macos-recovery-usb.sh \
   --device /dev/sdX \
   --macrecovery /path/to/macrecovery \
   --skip-download
