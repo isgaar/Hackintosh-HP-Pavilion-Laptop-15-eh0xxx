@@ -51,6 +51,18 @@ Si falla el arranque, guarda una fotografía de las últimas líneas en pantalla
 valida `EFI/OC/config.plist` con la versión de `ocvalidate` que corresponda a
 OpenCore.
 
+Esta EFI usa los binarios DEBUG de OpenCore y conserva automáticamente los
+registros de cada intento en el USB:
+
+- `EFI/OC/opencore-*.txt`: registro de OpenCore.
+- `EFI/OC/panic-*.txt`: informe de kernel panic, cuando exista.
+- `EFI/OC/SysReport/`: informe de firmware y hardware.
+
+Los argumentos de arranque `-v debug=0x12a keepsyms=1 msgbuf=1048576` preservan
+la salida detallada del kernel. Tras reproducir un fallo, apaga el equipo, monta
+el USB en Linux y guarda esos archivos antes de otro intento. Vuelve a los
+binarios RELEASE de OpenCore cuando el arranque sea estable.
+
 Consulta la [guía de instalación de Dortania](https://dortania.github.io/OpenCore-Install-Guide/)
 para comprender cada ajuste antes de modificarlo.
 
@@ -99,6 +111,18 @@ Use UEFI and disable Secure Boot. Keep verbose booting enabled while testing and
 retain a known-good EFI backup before making changes. If booting fails, capture
 the final on-screen lines and validate `EFI/OC/config.plist` with the
 `ocvalidate` version that matches OpenCore.
+
+This EFI uses OpenCore DEBUG binaries and automatically keeps records from each
+attempt on the USB drive:
+
+- `EFI/OC/opencore-*.txt`: OpenCore log.
+- `EFI/OC/panic-*.txt`: kernel-panic report, when available.
+- `EFI/OC/SysReport/`: firmware and hardware report.
+
+The `-v debug=0x12a keepsyms=1 msgbuf=1048576` boot arguments retain detailed
+kernel output. After reproducing a failure, shut down, mount the USB on Linux,
+and save these files before another attempt. Return to OpenCore RELEASE binaries
+once booting is stable.
 
 Read the [Dortania OpenCore Install Guide](https://dortania.github.io/OpenCore-Install-Guide/)
 before changing settings.
