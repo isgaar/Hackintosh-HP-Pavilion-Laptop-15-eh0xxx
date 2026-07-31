@@ -1,5 +1,4 @@
-# OpenCore diagnostic output generated during boot.
-EFI/OC/opencore-*.txt
-EFI/OC/panic-*.txt
-EFI/OC/SysReport/
-EFI/OC/Logs/
+# OpenCore diagnostic output generated during boot at the EFI volume root.
+/opencore-*.txt
+/panic-*.txt
+/SysReport/

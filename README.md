@@ -54,9 +54,9 @@ OpenCore.
 Esta EFI usa los binarios DEBUG de OpenCore y conserva automáticamente los
 registros de cada intento en el USB:
 
-- `EFI/OC/opencore-*.txt`: registro de OpenCore.
-- `EFI/OC/panic-*.txt`: informe de kernel panic, cuando exista.
-- `EFI/OC/SysReport/`: informe de firmware y hardware.
+- `opencore-*.txt`: registro de OpenCore en la raíz del volumen EFI.
+- `panic-*.txt`: informe de kernel panic en la raíz, cuando exista.
+- `SysReport/`: informe de firmware y hardware en la raíz.
 
 Los argumentos de arranque `-v debug=0x12a keepsyms=1 msgbuf=1048576` preservan
 la salida detallada del kernel. Tras reproducir un fallo, apaga el equipo, monta
@@ -115,9 +115,9 @@ the final on-screen lines and validate `EFI/OC/config.plist` with the
 This EFI uses OpenCore DEBUG binaries and automatically keeps records from each
 attempt on the USB drive:
 
-- `EFI/OC/opencore-*.txt`: OpenCore log.
-- `EFI/OC/panic-*.txt`: kernel-panic report, when available.
-- `EFI/OC/SysReport/`: firmware and hardware report.
+- `opencore-*.txt`: OpenCore log at the EFI volume root.
+- `panic-*.txt`: kernel-panic report at the root, when available.
+- `SysReport/`: firmware and hardware report at the root.
 
 The `-v debug=0x12a keepsyms=1 msgbuf=1048576` boot arguments retain detailed
 kernel output. After reproducing a failure, shut down, mount the USB on Linux,
