@@ -16,15 +16,16 @@ DEVICE=""
 MACRECOVERY_DIR="$DEFAULT_MACRECOVERY_DIR"
 SKIP_DOWNLOAD=false
 MOUNT_DIR=""
-MACOS_VERSION="sequoia"
 EFI_PARTITION=""
 RECOVERY_PARTITION=""
 RECOVERY_PARTITION_INDEX=""
 RECOVERY_HFS_MEMBER=""
+RECOVERY_PRODUCT_VERSION=""
 DMG2IMG=""
 SEVEN_ZIP=""
 
 readonly RECOVERY_MLB="00000000000000000"
+readonly TAHOE_BOARD_ID="Mac-CFF7D910A743CAAF"
 readonly MIN_USB_BYTES=$((4 * 1024 * 1024 * 1024))
 
 die() {
@@ -35,7 +36,7 @@ die() {
 usage() {
     cat <<EOF
 Uso / Usage:
-  sudo $0 --device /dev/sdX [--os sequoia|ventura] [--macrecovery /ruta/a/macrecovery] [--skip-download]
+  sudo $0 --device /dev/sdX [--macrecovery /ruta/a/macrecovery] [--skip-download]
 
 Opciones / Options:
   --device RUTA         Disco USB completo que se va a borrar (ej. /dev/sda).
@@ -43,21 +44,23 @@ Opciones / Options:
   --macrecovery RUTA    Directorio que contiene macrecovery.py. Por defecto:
   --macrecovery PATH    Directory containing macrecovery.py. Default:
                          \${MACRECOVERY_DIR} o ~/Proyectos/opencore/Utilities/macrecovery
-  --os VERSION           Recovery to download: sequoia (default) or ventura.
-  --os VERSION           Recovery a descargar: sequoia (predeterminado) o ventura.
+  --os tahoe            Alias opcional; únicamente Tahoe es compatible.
+  --os tahoe            Optional alias; only Tahoe is supported.
   --skip-download       Reutiliza una imagen de Recovery ya descargada.
   --skip-download       Reuse an already downloaded Recovery image.
   -h, --help            Muestra esta ayuda / Show this help.
 
 El script crea una GPT con una partición FAT32 OPENCORE para la EFI y una
-partición HFS para la imagen de Recovery. Descarga la Recovery elegida y extrae
-su partición HFS con dmg2img o 7z. No se puede ejecutar de forma no interactiva:
-antes de borrar se debe confirmar el texto solicitado.
+partición HFS para macOS Tahoe Recovery. Verifica que la imagen sea macOS 26.x
+antes de borrar el USB y después extrae su partición HFS con dmg2img o 7z. No
+se puede ejecutar de forma no interactiva: antes de borrar se debe confirmar el
+texto solicitado.
 
 The script creates a GPT with a FAT32 OPENCORE partition for the EFI and an HFS
-partition for the Recovery image. It downloads the selected Recovery and
-extracts its HFS partition with dmg2img or 7z. It cannot run non-interactively:
-the requested confirmation must be entered before the disk is erased.
+partition for macOS Tahoe Recovery. It verifies that the image is macOS 26.x
+before erasing the USB, then extracts its HFS partition with dmg2img or 7z. It
+cannot run non-interactively: the requested confirmation must be entered before
+the disk is erased.
 EOF
 }
 
@@ -106,36 +109,30 @@ download_recovery() {
         return
     fi
 
-    local board_id
-    local recovery_name
-    local -a recovery_options=()
-
-    case "$MACOS_VERSION" in
-        sequoia)
-            # MacBookPro16,3 is capped at Sequoia in Apple's model catalog.
-            # Using its latest Recovery avoids accidentally selecting Tahoe.
-            board_id="Mac-E7203C0F68AA0004"
-            recovery_name="macOS Sequoia"
-            recovery_options=(-os latest)
-            ;;
-        ventura)
-            board_id="Mac-B4831CEBD52A0C4C"
-            recovery_name="macOS Ventura"
-            ;;
-        *)
-            die "Versión no compatible: $MACOS_VERSION. Usa sequoia o ventura."
-            ;;
-    esac
-
-    printf 'Descargando %s Recovery mediante macrecovery...\n' "$recovery_name"
+    printf 'Descargando macOS Tahoe Recovery mediante macrecovery...\n'
     (
         cd -- "$MACRECOVERY_DIR"
         python3 ./macrecovery.py \
-            -b "$board_id" \
+            -b "$TAHOE_BOARD_ID" \
             -m "$RECOVERY_MLB" \
-            "${recovery_options[@]}" \
+            -os latest \
             download
     )
+}
+
+verify_tahoe_recovery() {
+    RECOVERY_PRODUCT_VERSION="$(
+        "$SEVEN_ZIP" e -so "$RECOVERY_DMG" \
+            'macOS Base System/System/Library/CoreServices/SystemVersion.plist' 2>/dev/null |
+            python3 -c 'import plistlib, sys; print(plistlib.loads(sys.stdin.buffer.read()).get("ProductVersion", ""))'
+    )"
+
+    [[ "$RECOVERY_PRODUCT_VERSION" == 26.* ]] || {
+        [[ -n "$RECOVERY_PRODUCT_VERSION" ]] || RECOVERY_PRODUCT_VERSION="desconocida / unknown"
+        die "La imagen descargada es macOS $RECOVERY_PRODUCT_VERSION; este EFI y este script son exclusivamente para Tahoe 26.x."
+    }
+
+    printf 'Recovery verificada: macOS Tahoe %s.\n' "$RECOVERY_PRODUCT_VERSION"
 }
 
 find_hfs_partition_index() {
@@ -193,8 +190,8 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --os)
-            [[ $# -ge 2 ]] || die "--os requiere sequoia o ventura."
-            MACOS_VERSION="${2,,}"
+            [[ $# -ge 2 ]] || die "--os requiere tahoe."
+            [[ "${2,,}" == "tahoe" ]] || die "Versión no compatible: $2. Usa tahoe."
             shift 2
             ;;
         --skip-download)
@@ -216,11 +213,6 @@ done
     usage
     die "Debes indicar --device /dev/sdX."
 }
-case "$MACOS_VERSION" in
-    sequoia|ventura) ;;
-    *) die "Versión no compatible: $MACOS_VERSION. Usa sequoia o ventura." ;;
-esac
-
 require_command sgdisk
 require_command lsblk
 require_command findmnt
@@ -234,7 +226,7 @@ require_command dd
 
 DMG2IMG="$(command -v dmg2img || true)"
 SEVEN_ZIP="$(command -v 7z || command -v 7zz || true)"
-[[ -n "$DMG2IMG" || -n "$SEVEN_ZIP" ]] || die "Instala dmg2img o 7z/7zz para extraer la Recovery HFS."
+[[ -n "$SEVEN_ZIP" ]] || die "Instala 7z/7zz para verificar y extraer la Recovery de Tahoe."
 
 FAT_FORMATTER="$(command -v mkfs.vfat || command -v mkfs.fat || true)"
 [[ -n "$FAT_FORMATTER" ]] || die "Instala dosfstools (mkfs.vfat o mkfs.fat)."
@@ -268,8 +260,8 @@ esac
 
 printf '\nEl siguiente disco se BORRARÁ por completo:\n\n'
 lsblk --paths --output NAME,RM,SIZE,MODEL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$DEVICE"
-printf '\nSe instalarán macOS Recovery y el EFI de este repositorio.\n'
-printf 'macOS Recovery and this repository EFI will be installed.\n'
+printf '\nSe instalarán macOS Tahoe Recovery y el EFI de este repositorio.\n'
+printf 'macOS Tahoe Recovery and this repository EFI will be installed.\n'
 read -r -p "Escribe exactamente 'ACEPTO' para continuar / Type exactly 'ACEPTO' to continue: " confirmation
 [[ "$confirmation" == "ACEPTO" ]] || die "Confirmación incorrecta / Invalid confirmation; no se modificó ningún disco."
 
@@ -286,6 +278,7 @@ else
     die "No encuentro BaseSystem/RecoveryImage .dmg y .chunklist en $RECOVERY_DIR"
 fi
 
+verify_tahoe_recovery
 find_hfs_partition_index
 
 printf '\nCreando GPT, FAT32 OPENCORE y partición HFS Recovery en %s...\n' "$DEVICE"
@@ -329,5 +322,5 @@ extract_hfs_recovery
 verify_hfs_recovery
 sync
 
-printf '\nUSB preparado correctamente: EFI en %s y Recovery HFS verificada en %s.\n' "$EFI_PARTITION" "$RECOVERY_PARTITION"
+printf '\nUSB Tahoe preparado correctamente: EFI en %s y Recovery HFS verificada en %s.\n' "$EFI_PARTITION" "$RECOVERY_PARTITION"
 printf 'Expúlsalo de forma segura y arranca desde la entrada UEFI del USB.\n'

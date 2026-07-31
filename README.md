@@ -1,195 +1,242 @@
-# OpenCore EFI
+# OpenCore Tahoe bootstrap EFI
 
 [Español](#español) · [English](#english)
 
 ## Español
 
-### Propósito
+### Estado y alcance
 
-EFI de OpenCore preparada para una instalación de macOS en un portátil AMD. Se
-mantienen únicamente los SSDT, kexts y el mapa USB necesarios para esta
-configuración. Revísala y pruébala siempre en una memoria USB antes de copiarla
-a una partición EFI interna.
+Este repositorio contiene una EFI de diagnóstico reconstruida para iniciar
+**macOS Tahoe 26.x Recovery** en un portátil AMD Renoir. Es una configuración
+mínima de primera etapa: todavía debe confirmarse en el equipo real antes de
+considerarla estable o copiarla al disco interno.
 
-### Contenido
+Dortania no ofrece soporte oficial para CPU AMD de portátil. La base OpenCore y
+los ajustes generales siguen su guía, mientras que el soporte de la iGPU Renoir
+depende de NootedRed y de parches comunitarios. No existe una configuración que
+pueda garantizar un arranque sin pruebas físicas.
 
-- `EFI/`: cargador OpenCore, ACPI, controladores y kexts.
-- `tools/prepare-macos-recovery-usb.sh`: crea un USB de Recovery desde Linux
-  con una EFI FAT32 y Recovery HFS, siguiendo el método 2 de Dortania.
-- `tools/restore-gentoo-uefi-entry.sh`: vuelve a registrar el cargador de
-  Gentoo en la NVRAM UEFI después de usar **Reset NVRAM**.
+No se almacenan en la documentación números de serie, UUID, direcciones ROM ni
+rutas personales. La identidad SMBIOS del archivo `config.plist` no debe
+publicarse en capturas o reportes.
 
-### Crear un USB desde Linux
+### Perfil mínimo de arranque
 
-Instala las dependencias de tu distribución: `python3`, `sgdisk`, `dosfstools`
-(`mkfs.vfat`) y `dmg2img` o `7z`/`7zz`. Indica siempre el disco USB completo,
-nunca una de sus particiones:
+La EFI se reconstruyó desde el `Sample.plist` y los binarios DEBUG de OpenCore
+1.0.8 correspondientes a la misma compilación. Incluye únicamente:
+
+- ACPI: `SSDT-EC`, `SSDT-RTCAWAC`, `SSDT-USB-Reset` y `SSDT-USBX`.
+- Kexts: Lilu, NootedRed, VirtualSMC, AppleMCEReporterDisabler,
+  ForgedInvariant, GenericUSBXHCI, USBToolBox, el mapa USB y el teclado PS/2.
+- Drivers: `apfs_aligned.efi`, `HfsPlus.efi` y `OpenRuntime.efi`.
+- 27 parches AMD compatibles con Darwin 25, ajustados a seis núcleos.
+- SMBIOS `MacBookPro16,2`, compatible con Tahoe.
+- Registro persistente de OpenCore y reporte de hardware en la memoria USB.
+- Una entrada explícita para el cargador EFI de Gentoo.
+
+Para Tahoe, `UEFI -> APFS -> EnableJumpstart` está desactivado y se carga
+`apfs_aligned.efi`. Los argumentos iniciales son:
+
+```text
+-v debug=0x100 keepsyms=1
+```
+
+La entrada Reset NVRAM se retiró de esta etapa. Al usarla se eliminaban también
+`BootOrder` y la entrada UEFI de Gentoo, sin corregir el fallo de macOS.
+
+### Crear el USB Tahoe desde Linux
+
+Instala `python3`, `sgdisk`, `dosfstools` (`mkfs.vfat`) y `7z` o `7zz`. El
+script solo admite macOS Tahoe y exige un disco USB completo, no una partición:
 
 ```bash
 sudo ./tools/prepare-macos-recovery-usb.sh --device /dev/sdX
 ```
 
-El script descarga la Recovery más reciente que sigue limitada a macOS Sequoia
-de forma predeterminada, crea una GPT con una partición FAT32 `OPENCORE` para la
-EFI y una partición HFS que recibe la Recovery extraída desde el DMG. El
-`board-id` empleado por `macrecovery` solo selecciona la Recovery; no cambia el
-SMBIOS del EFI. El script verifica la cabecera HFS+ antes de declarar éxito.
-Para Ventura, añade `--os ventura`. Si la imagen de Recovery ya existe, puedes
-reutilizarla:
+La descarga utiliza el comando de Tahoe publicado por Dortania:
+
+```bash
+python3 ./macrecovery.py \
+  -b Mac-CFF7D910A743CAAF \
+  -m 00000000000000000 \
+  -os latest download
+```
+
+El `board-id` anterior selecciona el catálogo de Recovery; no sustituye el
+SMBIOS del EFI. Si la descarga ya existe, se puede reutilizar:
 
 ```bash
 sudo ./tools/prepare-macos-recovery-usb.sh \
   --device /dev/sdX \
-  --macrecovery /ruta/a/macrecovery \
   --skip-download
 ```
 
-El destino se borra por completo. Como medida de seguridad, el script solo
-acepta discos USB extraíbles, rechaza discos montados y exige escribir
-`ACEPTO` antes de particionar. Confirma el dispositivo con `lsblk` antes de
-aceptar.
+Antes de modificar el disco, el script abre `SystemVersion.plist` dentro del
+DMG y rechaza cualquier versión que no sea 26.x. Después crea una GPT, una
+partición FAT32 `OPENCORE`, una partición HFS Recovery y verifica la cabecera
+HFS+ escrita.
 
-### Arranque y diagnóstico
+El disco indicado se borra por completo. El script rechaza dispositivos no USB,
+discos que no estén marcados como extraíbles y unidades montadas. Comprueba el
+destino con `lsblk` y escribe exactamente `ACEPTO` cuando estés seguro.
 
-Usa UEFI y desactiva Secure Boot. Mantén el modo verboso durante las primeras
-pruebas y conserva una copia de la EFI que funcionaba antes de cualquier cambio.
-Si falla el arranque, guarda una fotografía de las últimas líneas en pantalla y
-valida `EFI/OC/config.plist` con la versión de `ocvalidate` que corresponda a
-OpenCore.
+### Primera prueba controlada
 
-Esta EFI usa el conjunto completo de binarios DEBUG de OpenCore 1.0.8 y un
-`config.plist` validado con `ocvalidate` 1.0.8. Conserva automáticamente los
-registros de cada intento en el USB:
+1. En UEFI, desactiva Secure Boot y CSM. Activa XHCI Hand-off si la opción
+   existe. Mantén Above 4G Decoding activado y Re-Size BAR desactivado.
+2. Prepara de nuevo el USB con el script; copiar solo la carpeta EFI no cambia
+   una Recovery Sequoia antigua por Tahoe.
+3. Arranca la entrada UEFI del USB y elige `macOS Base System`.
+4. No selecciones Reset NVRAM.
+5. Tras el intento, monta la partición `OPENCORE` en Linux y revisa el TXT más
+   reciente. Un intento Tahoe debe mostrar kernel Darwin `25.x`, no `24.x`.
 
-- `opencore-*.txt`: registro de OpenCore en la raíz del volumen EFI.
-- `panic-*.txt`: informe de kernel panic en la raíz, cuando exista.
-- `SysReport/`: informe de firmware y hardware en la raíz.
+Los registros anteriores mostraban Sequoia 15.6/Darwin 24.6. Todos los parches
+AMD terminaban correctamente, pero `boot.efi` devolvía `EFI_ABORTED` después de
+`EXITBS:START`; no había kernel panic. Por eso cambiar repetidamente la serial
+no podía resolverlo.
 
-Los argumentos de arranque `-v debug=0x12a keepsyms=1 msgbuf=1048576` preservan
-la salida detallada del kernel. Tras reproducir un fallo, apaga el equipo, monta
-el USB en Linux y guarda esos archivos antes de otro intento. Vuelve a los
-binarios RELEASE de OpenCore cuando el arranque sea estable.
+### Funciones pospuestas
 
-La EFI usa `RebuildAppleMemoryMap=YES`, `SyncRuntimePermissions=YES` y, como
-ensayo controlado, `SetupVirtualMap=NO`: el registro confirma MAT y el último
-intento devolvió `EFI_ABORTED` después de `EXITBS` con el mapa virtual forzado.
-La entrada **Reset NVRAM** se mantiene visible durante el diagnóstico:
-ejecútala una vez después de actualizar la EFI y vuelve a arrancar macOS
-Recovery.
+Para aislar el primer arranque se retiraron temporalmente audio, Wi-Fi,
+Bluetooth, batería, brillo, lector de tarjetas, NVMeFix y trackpad I2C. Se
+reincorporarán por grupos después de alcanzar la interfaz de Recovery.
 
-La EFI incluye una entrada explícita al cargador systemd-boot del ESP interno,
-con una ruta de dispositivo completa, además de las entradas que OpenCore
-detecte automáticamente. Si se sustituye o se reparticiona el disco interno,
-esa ruta debe revisarse desde el registro de OpenCore.
+Tahoe eliminó AppleHDA, por lo que AppleALC no proporciona audio analógico de
+forma normal. Para la instalación se recomienda audio USB. La AX200 tampoco
+debe considerarse una conexión fiable dentro de Recovery; usa Ethernet USB o
+un instalador sin conexión.
 
-### Restaurar el arranque de Gentoo tras Reset NVRAM
+### Gentoo y NVRAM
 
-**Reset NVRAM** borra también las entradas de arranque guardadas por el
-firmware. Una vez iniciado Gentoo por cualquier vía, con su ESP montado en
-`/boot/efi`, restáurala con:
+OpenCore conserva una entrada directa al cargador systemd-boot del ESP interno.
+Si el firmware pierde su entrada de Gentoo, inicia el `.efi` manualmente una vez
+y vuelve a registrarlo desde Linux:
 
 ```bash
 sudo ./tools/restore-gentoo-uefi-entry.sh
 ```
 
-El script detecta systemd-boot o GRUB de Gentoo, valida que el archivo exista y
-crea una entrada `Gentoo Linux` en la NVRAM. La sitúa primero en `BootOrder` sin
-modificar particiones, el ESP ni el cargador. Para un cargador en otra ruta,
-indícalo explícitamente con `--loader '\EFI\gentoo\grubx64.efi'`.
+El script no modifica particiones ni archivos del ESP; únicamente crea y ordena
+la entrada UEFI mediante `efibootmgr`.
 
-Consulta la [guía de instalación de Dortania](https://dortania.github.io/OpenCore-Install-Guide/)
-para comprender cada ajuste antes de modificarlo.
+Consulta [TAHOE-REBUILD.md](docs/TAHOE-REBUILD.md) para la procedencia exacta de
+los componentes, decisiones de aislamiento y lista de validaciones.
 
 ## English
 
-### Purpose
+### Status and scope
 
-This OpenCore EFI is prepared for macOS installation on an AMD laptop. It keeps
-only the SSDTs, kexts, and USB map needed by this configuration. Review and test
-it from a USB drive before copying it to an internal EFI partition.
+This repository contains a diagnostic EFI rebuilt to boot **macOS Tahoe 26.x
+Recovery** on an AMD Renoir laptop. It is a minimal first-stage configuration;
+it still requires validation on the physical machine before it can be called
+stable or copied to an internal disk.
 
-### Contents
+Dortania does not officially support AMD laptop CPUs. General OpenCore settings
+follow its guide, while Renoir iGPU support depends on NootedRed and community
+AMD patches. No EFI can be guaranteed to boot without hardware testing.
 
-- `EFI/`: the OpenCore bootloader, ACPI tables, drivers, and kexts.
-- `tools/prepare-macos-recovery-usb.sh`: creates a Recovery USB on Linux with
-  a FAT32 EFI and HFS Recovery partition, following Dortania's method 2.
-- `tools/restore-gentoo-uefi-entry.sh`: registers the Gentoo boot loader in
-  UEFI NVRAM again after using **Reset NVRAM**.
+The documentation contains no serial numbers, UUIDs, ROM addresses, or personal
+paths. Do not expose the SMBIOS identity from `config.plist` in screenshots or
+reports.
 
-### Create a USB installer on Linux
+### Minimal boot profile
 
-Install your distribution's `python3`, `sgdisk`, `dosfstools` (`mkfs.vfat`),
-and `dmg2img` or `7z`/`7zz` packages. Always specify the complete USB disk,
-never one of its partitions:
+The EFI was rebuilt from the matching OpenCore 1.0.8 DEBUG `Sample.plist` and
+binaries. It contains only:
+
+- ACPI: `SSDT-EC`, `SSDT-RTCAWAC`, `SSDT-USB-Reset`, and `SSDT-USBX`.
+- Kexts: Lilu, NootedRed, VirtualSMC, AppleMCEReporterDisabler,
+  ForgedInvariant, GenericUSBXHCI, USBToolBox, the USB map, and PS/2 keyboard.
+- Drivers: `apfs_aligned.efi`, `HfsPlus.efi`, and `OpenRuntime.efi`.
+- 27 Darwin 25-capable AMD patches, adjusted for six cores.
+- A Tahoe-compatible `MacBookPro16,2` SMBIOS.
+- Persistent OpenCore logs and firmware hardware reports on the USB drive.
+- An explicit Gentoo EFI loader entry.
+
+For Tahoe, `UEFI -> APFS -> EnableJumpstart` is disabled and
+`apfs_aligned.efi` is loaded. Initial boot arguments are:
+
+```text
+-v debug=0x100 keepsyms=1
+```
+
+Reset NVRAM was removed from this stage because it also erased `BootOrder` and
+the Gentoo UEFI entry without fixing macOS.
+
+### Create the Tahoe USB on Linux
+
+Install `python3`, `sgdisk`, `dosfstools` (`mkfs.vfat`), and `7z` or `7zz`.
+Pass the complete removable USB disk, never one of its partitions:
 
 ```bash
 sudo ./tools/prepare-macos-recovery-usb.sh --device /dev/sdX
 ```
 
-By default, the script downloads the newest Recovery that is still capped at
-macOS Sequoia. It creates a GPT with a FAT32 `OPENCORE` partition for the EFI
-and an HFS partition that receives the Recovery extracted from the DMG. The
-`board-id` passed to `macrecovery` only selects the Recovery; it does not change
-the EFI SMBIOS. The script verifies the HFS+ header before it reports success.
-Add `--os ventura` for Ventura. Reuse an existing Recovery image when
-appropriate:
+The script uses Dortania's Tahoe recovery command and supports Tahoe only. Reuse
+an existing download with:
 
 ```bash
 sudo ./tools/prepare-macos-recovery-usb.sh \
   --device /dev/sdX \
-  --macrecovery /path/to/macrecovery \
   --skip-download
 ```
 
-The target drive is completely erased. As a safeguard, the script accepts only
-removable USB disks, rejects mounted disks, and requires the exact word
-`ACEPTO` before partitioning. Confirm the target with `lsblk` before accepting.
+Before erasing anything, the script reads `SystemVersion.plist` from the DMG and
+rejects every image that is not macOS 26.x. It then creates a GPT, a FAT32
+`OPENCORE` partition, an HFS Recovery partition, and validates the written HFS+
+header.
 
-### Booting and troubleshooting
+The selected disk is erased completely. The script rejects non-USB devices,
+non-removable disks, and mounted volumes. Verify the target with `lsblk` and type
+the exact word `ACEPTO` only when the target is correct.
 
-Use UEFI and disable Secure Boot. Keep verbose booting enabled while testing and
-retain a known-good EFI backup before making changes. If booting fails, capture
-the final on-screen lines and validate `EFI/OC/config.plist` with the
-`ocvalidate` version that matches OpenCore.
+### Controlled first test
 
-This EFI uses the complete OpenCore 1.0.8 DEBUG binary set and a `config.plist`
-validated with `ocvalidate` 1.0.8. It automatically keeps records from each
-attempt on the USB drive:
+1. Disable Secure Boot and CSM in UEFI. Enable XHCI Hand-off when available.
+   Keep Above 4G Decoding enabled and Re-Size BAR disabled.
+2. Rebuild the USB with the script; copying only the EFI cannot turn an old
+   Sequoia Recovery into Tahoe.
+3. Boot the USB UEFI entry and select `macOS Base System`.
+4. Do not use Reset NVRAM.
+5. Mount `OPENCORE` from Linux after the attempt and inspect the newest TXT. A
+   real Tahoe attempt must report Darwin `25.x`, not `24.x`.
 
-- `opencore-*.txt`: OpenCore log at the EFI volume root.
-- `panic-*.txt`: kernel-panic report at the root, when available.
-- `SysReport/`: firmware and hardware report at the root.
+The previous logs were Sequoia 15.6/Darwin 24.6. AMD patching completed, but
+`boot.efi` returned `EFI_ABORTED` after `EXITBS:START`; there was no kernel
+panic. Repeated serial changes therefore could not fix the failure.
 
-The `-v debug=0x12a keepsyms=1 msgbuf=1048576` boot arguments retain detailed
-kernel output. After reproducing a failure, shut down, mount the USB on Linux,
-and save these files before another attempt. Return to OpenCore RELEASE binaries
-once booting is stable.
+### Deferred functionality
 
-The EFI uses `RebuildAppleMemoryMap=YES`, `SyncRuntimePermissions=YES`, and,
-as a controlled test, `SetupVirtualMap=NO`: the log confirms Memory Attribute
-Table (MAT) support, while the latest attempt returned `EFI_ABORTED` after
-`EXITBS` with a forced virtual map. The **Reset NVRAM** entry stays visible
-while debugging: run it once after updating the EFI, then boot macOS Recovery
-again.
+Audio, Wi-Fi, Bluetooth, battery, brightness, card reader, NVMeFix, and I2C
+trackpad support are intentionally absent from the first-stage EFI. They should
+be reintroduced in small groups only after Recovery reaches its graphical UI.
 
-The EFI includes an explicit entry for the internal ESP's systemd-boot loader
-using a full device path, in addition to entries OpenCore can discover
-automatically. If the internal drive is replaced or repartitioned, review that
-path in the OpenCore log.
+Tahoe removed AppleHDA, so AppleALC no longer supplies normal analog audio. Use
+USB audio during installation. The AX200 should not be treated as dependable
+inside Recovery either; use USB Ethernet or an offline installer.
 
-### Restore Gentoo booting after Reset NVRAM
+### Gentoo and NVRAM
 
-**Reset NVRAM** also removes the boot entries stored by the firmware. Once
-Gentoo has been booted by any route and its ESP is mounted at `/boot/efi`, run:
+OpenCore keeps a direct entry for the internal systemd-boot EFI loader. If the
+firmware loses the Gentoo entry, boot its `.efi` manually once and restore it
+from Linux:
 
 ```bash
 sudo ./tools/restore-gentoo-uefi-entry.sh
 ```
 
-The script detects systemd-boot or Gentoo GRUB, verifies that the loader exists,
-and creates a `Gentoo Linux` NVRAM entry. It places it first in `BootOrder`
-without modifying partitions, the ESP, or the loader. For a loader at another
-path, state it explicitly with `--loader '\EFI\gentoo\grubx64.efi'`.
+The helper changes no partitions or ESP files; it only recreates and orders the
+UEFI entry with `efibootmgr`.
 
-Read the [Dortania OpenCore Install Guide](https://dortania.github.io/OpenCore-Install-Guide/)
-before changing settings.
+See [TAHOE-REBUILD.md](docs/TAHOE-REBUILD.md) for component provenance,
+isolation decisions, and validation results.
+
+## References
+
+- [Dortania OpenCore Install Guide](https://dortania.github.io/OpenCore-Install-Guide/)
+- [Dortania: macOS Tahoe notes](https://dortania.github.io/OpenCore-Install-Guide/extras/tahoe.html)
+- [Dortania: Linux installer](https://dortania.github.io/OpenCore-Install-Guide/installer-guide/linux-install.html)
+- [AMD Vanilla](https://github.com/AMD-OSX/AMD_Vanilla)
+- [NootedRed](https://github.com/ChefKissInc/NootedRed)
+- [OpCore-Simplify](https://github.com/lzhoang2801/OpCore-Simplify)
