@@ -65,8 +65,16 @@ la salida detallada del kernel. Tras reproducir un fallo, apaga el equipo, monta
 el USB en Linux y guarda esos archivos antes de otro intento. Vuelve a los
 binarios RELEASE de OpenCore cuando el arranque sea estable.
 
-La EFI incluye una entrada explícita para el cargador EFI de Linux basado en
-systemd-boot, además de las entradas que OpenCore detecte automáticamente.
+Para las pruebas de arranque temprano con firmware OEM, la EFI utiliza la
+alternativa `EnableWriteUnprotector=YES` y `RebuildAppleMemoryMap=NO`; estos
+dos valores se cambian como un par. La entrada **Reset NVRAM** se mantiene
+visible durante el diagnóstico: ejecútala una vez después de actualizar la EFI
+y vuelve a arrancar macOS Recovery.
+
+La EFI incluye una entrada explícita al cargador systemd-boot del ESP interno,
+con una ruta de dispositivo completa, además de las entradas que OpenCore
+detecte automáticamente. Si se sustituye o se reparticiona el disco interno,
+esa ruta debe revisarse desde el registro de OpenCore.
 
 Consulta la [guía de instalación de Dortania](https://dortania.github.io/OpenCore-Install-Guide/)
 para comprender cada ajuste antes de modificarlo.
@@ -131,8 +139,15 @@ kernel output. After reproducing a failure, shut down, mount the USB on Linux,
 and save these files before another attempt. Return to OpenCore RELEASE binaries
 once booting is stable.
 
-The EFI includes an explicit entry for a systemd-boot based Linux EFI loader,
-in addition to entries OpenCore can discover automatically.
+For early-boot testing on OEM firmware, the EFI uses the
+`EnableWriteUnprotector=YES` and `RebuildAppleMemoryMap=NO` fallback; these
+settings are changed as a pair. The **Reset NVRAM** entry stays visible while
+debugging: run it once after updating the EFI, then boot macOS Recovery again.
+
+The EFI includes an explicit entry for the internal ESP's systemd-boot loader
+using a full device path, in addition to entries OpenCore can discover
+automatically. If the internal drive is replaced or repartitioned, review that
+path in the OpenCore log.
 
 Read the [Dortania OpenCore Install Guide](https://dortania.github.io/OpenCore-Install-Guide/)
 before changing settings.

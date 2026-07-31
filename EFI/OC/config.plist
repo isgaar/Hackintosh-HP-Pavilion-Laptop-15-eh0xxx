@@ -186,7 +186,7 @@
 			<key>EnableSafeModeSlide</key>
 			<true/>
 			<key>EnableWriteUnprotector</key>
-			<false/>
+			<true/>
 			<key>FixupAppleEfiImages</key>
 			<true/>
 			<key>ForceBooterSignature</key>
@@ -204,7 +204,7 @@
 			<key>ProvideMaxSlide</key>
 			<integer>0</integer>
 			<key>RebuildAppleMemoryMap</key>
-			<true/>
+			<false/>
 			<key>ResizeAppleGpuBars</key>
 			<integer>-1</integer>
 			<key>SetupVirtualMap</key>
@@ -1883,7 +1883,7 @@
 			<key>HibernateSkipsPicker</key>
 			<false/>
 			<key>HideAuxiliary</key>
-			<true/>
+			<false/>
 			<key>InstanceIdentifier</key>
 			<string></string>
 			<key>LauncherOption</key>
@@ -1934,7 +1934,7 @@
 				<key>Auxiliary</key>
 				<false/>
 				<key>Comment</key>
-				<string>Explicit systemd-boot entry on the internal Linux EFI System Partition.</string>
+				<string>systemd-boot on the internal Linux EFI System Partition.</string>
 				<key>Enabled</key>
 				<true/>
 				<key>Flavour</key>
@@ -1942,7 +1942,7 @@
 				<key>Name</key>
 				<string>Gentoo Linux</string>
 				<key>Path</key>
-				<string>\EFI\systemd\systemd-bootx64.efi</string>
+				<string>PciRoot(0x0)/Pci(0x2,0x4)/Pci(0x0,0x0)/NVMe(0x1,FA-15-06-4E-8B-44-1B-00)/HD(1,GPT,82843E95-E5E1-4DF4-9257-9F1292BEA081,0x800,0x200000)/\EFI\systemd\systemd-bootx64.efi</string>
 				<key>TextMode</key>
 				<false/>
 			</dict>
