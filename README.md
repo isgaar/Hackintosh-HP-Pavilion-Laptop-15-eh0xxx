@@ -65,11 +65,10 @@ la salida detallada del kernel. Tras reproducir un fallo, apaga el equipo, monta
 el USB en Linux y guarda esos archivos antes de otro intento. Vuelve a los
 binarios RELEASE de OpenCore cuando el arranque sea estable.
 
-Para las pruebas de arranque temprano con firmware OEM, la EFI utiliza la
-alternativa `EnableWriteUnprotector=YES` y `RebuildAppleMemoryMap=NO`; estos
-dos valores se cambian como un par. La entrada **Reset NVRAM** se mantiene
-visible durante el diagnóstico: ejecútala una vez después de actualizar la EFI
-y vuelve a arrancar macOS Recovery.
+La EFI usa `RebuildAppleMemoryMap=YES`, pues el registro de firmware confirma
+compatibilidad con la tabla de atributos de memoria (MAT). La entrada **Reset
+NVRAM** se mantiene visible durante el diagnóstico: ejecútala una vez después
+de actualizar la EFI y vuelve a arrancar macOS Recovery.
 
 La EFI incluye una entrada explícita al cargador systemd-boot del ESP interno,
 con una ruta de dispositivo completa, además de las entradas que OpenCore
@@ -139,9 +138,8 @@ kernel output. After reproducing a failure, shut down, mount the USB on Linux,
 and save these files before another attempt. Return to OpenCore RELEASE binaries
 once booting is stable.
 
-For early-boot testing on OEM firmware, the EFI uses the
-`EnableWriteUnprotector=YES` and `RebuildAppleMemoryMap=NO` fallback; these
-settings are changed as a pair. The **Reset NVRAM** entry stays visible while
+The EFI uses `RebuildAppleMemoryMap=YES`, as the firmware log confirms Memory
+Attribute Table (MAT) support. The **Reset NVRAM** entry stays visible while
 debugging: run it once after updating the EFI, then boot macOS Recovery again.
 
 The EFI includes an explicit entry for the internal ESP's systemd-boot loader
