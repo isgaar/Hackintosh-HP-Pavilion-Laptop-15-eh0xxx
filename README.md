@@ -16,6 +16,8 @@ a una partición EFI interna.
 - `EFI/`: cargador OpenCore, ACPI, controladores y kexts.
 - `tools/prepare-macos-recovery-usb.sh`: crea un USB de Recovery desde Linux
   con una EFI FAT32 y Recovery HFS, siguiendo el método 2 de Dortania.
+- `tools/restore-gentoo-uefi-entry.sh`: vuelve a registrar el cargador de
+  Gentoo en la NVRAM UEFI después de usar **Reset NVRAM**.
 
 ### Crear un USB desde Linux
 
@@ -75,6 +77,21 @@ con una ruta de dispositivo completa, además de las entradas que OpenCore
 detecte automáticamente. Si se sustituye o se reparticiona el disco interno,
 esa ruta debe revisarse desde el registro de OpenCore.
 
+### Restaurar el arranque de Gentoo tras Reset NVRAM
+
+**Reset NVRAM** borra también las entradas de arranque guardadas por el
+firmware. Una vez iniciado Gentoo por cualquier vía, con su ESP montado en
+`/boot/efi`, restáurala con:
+
+```bash
+sudo ./tools/restore-gentoo-uefi-entry.sh
+```
+
+El script detecta systemd-boot o GRUB de Gentoo, valida que el archivo exista y
+crea una entrada `Gentoo Linux` en la NVRAM. La sitúa primero en `BootOrder` sin
+modificar particiones, el ESP ni el cargador. Para un cargador en otra ruta,
+indícalo explícitamente con `--loader '\EFI\gentoo\grubx64.efi'`.
+
 Consulta la [guía de instalación de Dortania](https://dortania.github.io/OpenCore-Install-Guide/)
 para comprender cada ajuste antes de modificarlo.
 
@@ -91,6 +108,8 @@ it from a USB drive before copying it to an internal EFI partition.
 - `EFI/`: the OpenCore bootloader, ACPI tables, drivers, and kexts.
 - `tools/prepare-macos-recovery-usb.sh`: creates a Recovery USB on Linux with
   a FAT32 EFI and HFS Recovery partition, following Dortania's method 2.
+- `tools/restore-gentoo-uefi-entry.sh`: registers the Gentoo boot loader in
+  UEFI NVRAM again after using **Reset NVRAM**.
 
 ### Create a USB installer on Linux
 
@@ -146,6 +165,20 @@ The EFI includes an explicit entry for the internal ESP's systemd-boot loader
 using a full device path, in addition to entries OpenCore can discover
 automatically. If the internal drive is replaced or repartitioned, review that
 path in the OpenCore log.
+
+### Restore Gentoo booting after Reset NVRAM
+
+**Reset NVRAM** also removes the boot entries stored by the firmware. Once
+Gentoo has been booted by any route and its ESP is mounted at `/boot/efi`, run:
+
+```bash
+sudo ./tools/restore-gentoo-uefi-entry.sh
+```
+
+The script detects systemd-boot or Gentoo GRUB, verifies that the loader exists,
+and creates a `Gentoo Linux` NVRAM entry. It places it first in `BootOrder`
+without modifying partitions, the ESP, or the loader. For a loader at another
+path, state it explicitly with `--loader '\EFI\gentoo\grubx64.efi'`.
 
 Read the [Dortania OpenCore Install Guide](https://dortania.github.io/OpenCore-Install-Guide/)
 before changing settings.
