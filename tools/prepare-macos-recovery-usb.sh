@@ -138,14 +138,18 @@ find_hfs_partition_index() {
 
     if [[ -n "$DMG2IMG" ]]; then
         partition_list="$("$DMG2IMG" -l "$RECOVERY_DMG" 2>&1)" || die "No se pudo listar la imagen de Recovery con dmg2img."
-        RECOVERY_PARTITION_INDEX="$(printf '%s\n' "$partition_list" | awk '
+        RECOVERY_PARTITION_INDEX="$(awk '
             /^partition [0-9]+:/ { part_no = $2; sub(/:/, "", part_no) }
-            /Apple_HFS/ { print part_no; exit }
-        ')"
+            /Apple_HFS/ && !found { result = part_no; found = 1 }
+            END { if (found) print result }
+        ' <<< "$partition_list")"
     else
-        RECOVERY_HFS_MEMBER="$("$SEVEN_ZIP" l "$RECOVERY_DMG" 2>/dev/null | awk '/^Path = [0-9]+\.hfs$/ { print $3; exit }')"
+        partition_list="$("$SEVEN_ZIP" l "$RECOVERY_DMG" 2>&1)" || die "No se pudo listar la imagen de Recovery con 7z."
+        RECOVERY_HFS_MEMBER="$(awk '
+            /^Path = [0-9]+\.hfs$/ && !found { result = $3; found = 1 }
+            END { if (found) print result }
+        ' <<< "$partition_list")"
         RECOVERY_PARTITION_INDEX="${RECOVERY_HFS_MEMBER%.hfs}"
-        partition_list="Miembro detectado por 7z: ${RECOVERY_HFS_MEMBER:-ninguno}"
     fi
 
     [[ "$RECOVERY_PARTITION_INDEX" =~ ^[0-9]+$ ]] || {
@@ -214,7 +218,7 @@ require_command mktemp
 require_command sync
 
 DMG2IMG="$(command -v dmg2img || true)"
-SEVEN_ZIP="$(command -v 7zz || command -v 7z || true)"
+SEVEN_ZIP="$(command -v 7z || command -v 7zz || true)"
 [[ -n "$DMG2IMG" || -n "$SEVEN_ZIP" ]] || die "Instala dmg2img o 7z/7zz para extraer la Recovery HFS."
 
 FAT_FORMATTER="$(command -v mkfs.vfat || command -v mkfs.fat || true)"
