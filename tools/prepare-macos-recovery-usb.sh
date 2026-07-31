@@ -108,11 +108,15 @@ download_recovery() {
 
     local board_id
     local recovery_name
+    local -a recovery_options=()
 
     case "$MACOS_VERSION" in
         sequoia)
-            board_id="Mac-7BA5B2D9E42DDD94"
+            # MacBookPro16,3 is capped at Sequoia in Apple's model catalog.
+            # Using its latest Recovery avoids accidentally selecting Tahoe.
+            board_id="Mac-E7203C0F68AA0004"
             recovery_name="macOS Sequoia"
+            recovery_options=(-os latest)
             ;;
         ventura)
             board_id="Mac-B4831CEBD52A0C4C"
@@ -129,6 +133,7 @@ download_recovery() {
         python3 ./macrecovery.py \
             -b "$board_id" \
             -m "$RECOVERY_MLB" \
+            "${recovery_options[@]}" \
             download
     )
 }

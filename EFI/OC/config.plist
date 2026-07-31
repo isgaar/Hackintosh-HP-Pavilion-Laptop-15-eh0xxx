@@ -208,7 +208,7 @@
 			<key>ResizeAppleGpuBars</key>
 			<integer>-1</integer>
 			<key>SetupVirtualMap</key>
-			<true/>
+			<false/>
 			<key>SignalAppleOS</key>
 			<false/>
 			<key>SyncRuntimePermissions</key>
@@ -2108,14 +2108,14 @@
 			<key>AdviseFeatures</key>
 			<false/>
 			<key>MLB</key>
-			<string>C02047600QXP8PGJA</string>
+			<string>C02116701GUP8PG1M</string>
 			<key>MaxBIOSVersion</key>
 			<false/>
 			<key>ProcessorType</key>
 			<integer>1537</integer>
 			<key>ROM</key>
 			<data>
-			RbkJhqFF
+			pfJMOjfj
 			</data>
 			<key>SpoofVendor</key>
 			<true/>
@@ -2124,9 +2124,9 @@
 			<key>SystemProductName</key>
 			<string>MacBookPro16,2</string>
 			<key>SystemSerialNumber</key>
-			<string>C02DQCZLML7H</string>
+			<string>C02FLVYEML7H</string>
 			<key>SystemUUID</key>
-			<string>138759A3-F29A-43CC-894E-6A3F1B4B4800</string>
+			<string>A60668DE-0725-4461-B427-483A33490732</string>
 		</dict>
 		<key>UpdateDataHub</key>
 		<true/>
@@ -2221,6 +2221,8 @@
 				<string></string>
 				<key>Enabled</key>
 				<true/>
+				<key>HideVerbose</key>
+				<false/>
 				<key>LoadEarly</key>
 				<false/>
 				<key>Path</key>
@@ -2233,6 +2235,8 @@
 				<string></string>
 				<key>Enabled</key>
 				<true/>
+				<key>HideVerbose</key>
+				<false/>
 				<key>LoadEarly</key>
 				<false/>
 				<key>Path</key>
@@ -2245,6 +2249,8 @@
 				<string></string>
 				<key>Enabled</key>
 				<true/>
+				<key>HideVerbose</key>
+				<false/>
 				<key>LoadEarly</key>
 				<false/>
 				<key>Path</key>

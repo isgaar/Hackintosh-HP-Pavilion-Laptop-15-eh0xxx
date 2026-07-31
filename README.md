@@ -29,11 +29,13 @@ nunca una de sus particiones:
 sudo ./tools/prepare-macos-recovery-usb.sh --device /dev/sdX
 ```
 
-El script descarga macOS Sequoia Recovery de forma predeterminada, crea una GPT
-con una partición FAT32 `OPENCORE` para la EFI y una partición HFS que recibe la
-Recovery extraída desde el DMG. El script verifica la cabecera HFS+ antes de
-declarar éxito. Para Ventura, añade `--os ventura`. Si la imagen de Recovery ya
-existe, puedes reutilizarla:
+El script descarga la Recovery más reciente que sigue limitada a macOS Sequoia
+de forma predeterminada, crea una GPT con una partición FAT32 `OPENCORE` para la
+EFI y una partición HFS que recibe la Recovery extraída desde el DMG. El
+`board-id` empleado por `macrecovery` solo selecciona la Recovery; no cambia el
+SMBIOS del EFI. El script verifica la cabecera HFS+ antes de declarar éxito.
+Para Ventura, añade `--os ventura`. Si la imagen de Recovery ya existe, puedes
+reutilizarla:
 
 ```bash
 sudo ./tools/prepare-macos-recovery-usb.sh \
@@ -55,7 +57,8 @@ Si falla el arranque, guarda una fotografía de las últimas líneas en pantalla
 valida `EFI/OC/config.plist` con la versión de `ocvalidate` que corresponda a
 OpenCore.
 
-Esta EFI usa los binarios DEBUG de OpenCore y conserva automáticamente los
+Esta EFI usa el conjunto completo de binarios DEBUG de OpenCore 1.0.8 y un
+`config.plist` validado con `ocvalidate` 1.0.8. Conserva automáticamente los
 registros de cada intento en el USB:
 
 - `opencore-*.txt`: registro de OpenCore en la raíz del volumen EFI.
@@ -67,10 +70,12 @@ la salida detallada del kernel. Tras reproducir un fallo, apaga el equipo, monta
 el USB en Linux y guarda esos archivos antes de otro intento. Vuelve a los
 binarios RELEASE de OpenCore cuando el arranque sea estable.
 
-La EFI usa `RebuildAppleMemoryMap=YES`, pues el registro de firmware confirma
-compatibilidad con la tabla de atributos de memoria (MAT). La entrada **Reset
-NVRAM** se mantiene visible durante el diagnóstico: ejecútala una vez después
-de actualizar la EFI y vuelve a arrancar macOS Recovery.
+La EFI usa `RebuildAppleMemoryMap=YES`, `SyncRuntimePermissions=YES` y, como
+ensayo controlado, `SetupVirtualMap=NO`: el registro confirma MAT y el último
+intento devolvió `EFI_ABORTED` después de `EXITBS` con el mapa virtual forzado.
+La entrada **Reset NVRAM** se mantiene visible durante el diagnóstico:
+ejecútala una vez después de actualizar la EFI y vuelve a arrancar macOS
+Recovery.
 
 La EFI incluye una entrada explícita al cargador systemd-boot del ESP interno,
 con una ruta de dispositivo completa, además de las entradas que OpenCore
@@ -121,11 +126,13 @@ never one of its partitions:
 sudo ./tools/prepare-macos-recovery-usb.sh --device /dev/sdX
 ```
 
-The script downloads macOS Sequoia Recovery by default, creates a GPT with a
-FAT32 `OPENCORE` partition for the EFI and an HFS partition that receives the
-Recovery extracted from the DMG. The script verifies the HFS+ header before it
-reports success. Add `--os ventura` for Ventura. Reuse an existing Recovery
-image when appropriate:
+By default, the script downloads the newest Recovery that is still capped at
+macOS Sequoia. It creates a GPT with a FAT32 `OPENCORE` partition for the EFI
+and an HFS partition that receives the Recovery extracted from the DMG. The
+`board-id` passed to `macrecovery` only selects the Recovery; it does not change
+the EFI SMBIOS. The script verifies the HFS+ header before it reports success.
+Add `--os ventura` for Ventura. Reuse an existing Recovery image when
+appropriate:
 
 ```bash
 sudo ./tools/prepare-macos-recovery-usb.sh \
@@ -145,7 +152,8 @@ retain a known-good EFI backup before making changes. If booting fails, capture
 the final on-screen lines and validate `EFI/OC/config.plist` with the
 `ocvalidate` version that matches OpenCore.
 
-This EFI uses OpenCore DEBUG binaries and automatically keeps records from each
+This EFI uses the complete OpenCore 1.0.8 DEBUG binary set and a `config.plist`
+validated with `ocvalidate` 1.0.8. It automatically keeps records from each
 attempt on the USB drive:
 
 - `opencore-*.txt`: OpenCore log at the EFI volume root.
@@ -157,9 +165,12 @@ kernel output. After reproducing a failure, shut down, mount the USB on Linux,
 and save these files before another attempt. Return to OpenCore RELEASE binaries
 once booting is stable.
 
-The EFI uses `RebuildAppleMemoryMap=YES`, as the firmware log confirms Memory
-Attribute Table (MAT) support. The **Reset NVRAM** entry stays visible while
-debugging: run it once after updating the EFI, then boot macOS Recovery again.
+The EFI uses `RebuildAppleMemoryMap=YES`, `SyncRuntimePermissions=YES`, and,
+as a controlled test, `SetupVirtualMap=NO`: the log confirms Memory Attribute
+Table (MAT) support, while the latest attempt returned `EFI_ABORTED` after
+`EXITBS` with a forced virtual map. The **Reset NVRAM** entry stays visible
+while debugging: run it once after updating the EFI, then boot macOS Recovery
+again.
 
 The EFI includes an explicit entry for the internal ESP's systemd-boot loader
 using a full device path, in addition to entries OpenCore can discover
